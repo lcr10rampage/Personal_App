@@ -76,6 +76,25 @@ def update_event(search_name: str, new_summary: str = None, new_start: str = Non
     updated = service.events().update(calendarId="primary", eventId=event["id"], body=event).execute()
     return f"Updated '{updated['summary']}'."
 
+def check_conflicts(start_datetime: str, end_datetime: str) -> str:
+    service = get_service()
+    result = service.events().list(
+        calendarId="primary",
+        timeMin=start_datetime + "-04:00" if "+" not in start_datetime and "Z" not in start_datetime else start_datetime,
+        timeMax=end_datetime + "-04:00" if "+" not in end_datetime and "Z" not in end_datetime else end_datetime,
+        singleEvents=True,
+        orderBy="startTime"
+    ).execute()
+    events = result.get("items", [])
+    if not events:
+        return "no_conflicts"
+    lines = []
+    for e in events:
+        start = e["start"].get("dateTime", e["start"].get("date"))
+        end = e["end"].get("dateTime", e["end"].get("date"))
+        lines.append(f"- {e['summary']} | start: {start} | end: {end}")
+    return "CONFLICTS FOUND:\n" + "\n".join(lines)
+
 def delete_event(search_name: str) -> str:
     service = get_service()
     event = find_event(service, search_name)

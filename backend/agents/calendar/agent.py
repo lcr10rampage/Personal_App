@@ -1,7 +1,7 @@
 import os
 import anthropic
 from agents.calendar.google_client import (
-    fetch_upcoming_events, create_event, update_event, delete_event
+    fetch_upcoming_events, create_event, update_event, delete_event, check_conflicts
 )
 
 SYSTEM_PROMPT = """
@@ -45,3 +45,6 @@ class CalendarAgent:
 
     def delete(self, search_name: str) -> str:
         return delete_event(search_name)
+
+    def conflicts(self, start_datetime: str, end_datetime: str) -> str:
+        return check_conflicts(start_datetime, end_datetime)

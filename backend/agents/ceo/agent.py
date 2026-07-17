@@ -21,6 +21,10 @@ CRITICAL RULES:
 5. Today's date is 2026-07-17. The user's timezone is America/New_York (EDT, UTC-4).
 6. When the user says "6pm", generate 2026-XX-XXT18:00:00 — do NOT add or subtract any offset.
 7. Never send an email. Only drafts are allowed. Always confirm with the user before drafting.
+8. Before creating any event, ALWAYS call check_calendar_conflicts first with the proposed start and end time.
+   - If the result is "no_conflicts", proceed to create the event immediately.
+   - If conflicts are found, STOP and tell the user exactly what overlaps, then ask: "Would you like me to reschedule [conflicting event] to fit, or delete it entirely?" Wait for their answer before doing anything.
+9. When the user answers the conflict question, execute their choice immediately using the appropriate tool.
 
 After all tool calls are done, give a short calm confirmation of what was done.
 """
@@ -75,6 +79,18 @@ TOOLS = [
                 "search_name": {"type": "string"}
             },
             "required": ["search_name"]
+        }
+    },
+    {
+        "name": "check_calendar_conflicts",
+        "description": "Check if a proposed time slot conflicts with existing calendar events. Always call this before creating a new event.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_datetime": {"type": "string", "description": "Proposed start time in ISO 8601, e.g. 2026-07-18T15:00:00"},
+                "end_datetime": {"type": "string", "description": "Proposed end time in ISO 8601, e.g. 2026-07-18T16:00:00"}
+            },
+            "required": ["start_datetime", "end_datetime"]
         }
     },
     {
@@ -147,6 +163,11 @@ class CEOAgent:
             )
         elif block.name == "delete_calendar_event":
             return self.calendar.delete(search_name=block.input["search_name"])
+        elif block.name == "check_calendar_conflicts":
+            return self.calendar.conflicts(
+                start_datetime=block.input["start_datetime"],
+                end_datetime=block.input["end_datetime"]
+            )
         elif block.name == "call_email_agent":
             return self.email.ask(block.input["query"])
         return "Unknown tool."
