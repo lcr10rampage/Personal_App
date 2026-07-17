@@ -2,6 +2,7 @@ import os
 import anthropic
 from agents.calendar.agent import CalendarAgent
 from agents.email.agent import EmailAgent
+from agents.memory.agent import MemoryAgent
 
 SYSTEM_PROMPT = """
 You are the Orchestrator — the user's personal chief of staff. Calm, organized, and trusted.
@@ -52,7 +53,13 @@ After all tools complete, give one short calm summary of what was done.
 Today is 2026-07-17. Timezone: America/New_York (EDT, UTC-4).
 "6pm" → T18:00:00. Do NOT apply any offset manually.
 
-### Rule 9: Email drafting — always delegate, never write yourself
+### Rule 9: Memory AI — use it before and after every manager call
+Before sending a request to any manager, call get_memory_for_manager to get the user's relevant preferences.
+Pass those preferences to the manager as part of the request so the manager can personalize its response.
+When the user explicitly tells you something about how they like things done, immediately call save_memory.
+When the user confirms a pattern ("yes remember that"), call save_memory with what they confirmed.
+
+### Rule 10: Email drafting — always delegate, never write yourself
 You must NEVER write email content yourself. Ever.
 - User wants a draft → call draft_email immediately. The Communication Manager writes it.
 - Show the returned draft to the user exactly as written. Ask: "Ready to send, or would you like changes?"
@@ -193,6 +200,31 @@ TOOLS = [
         }
     },
     {
+        "name": "get_memory_for_manager",
+        "description": "Ask the Memory AI for the user preferences relevant to a specific manager before that manager responds. Use this to personalize manager requests.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "manager": {"type": "string", "description": "Time Manager | Communication Manager | School Manager | Goal Manager | Notification Manager"}
+            },
+            "required": ["manager"]
+        }
+    },
+    {
+        "name": "save_memory",
+        "description": "Save a confirmed user preference to the Memory AI. Use this when the user confirms a pattern or explicitly tells you something about how they like things done.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "description": "work_style | information_style | planning_style | writing_style | notification_style | decision_style | motivation_style | personal"},
+                "key": {"type": "string", "description": "Short identifier for this preference"},
+                "value": {"type": "string", "description": "The preference or fact to remember"},
+                "context": {"type": "string", "description": "When this applies (e.g. 'email summaries', 'study planning', 'general')"}
+            },
+            "required": ["category", "key", "value"]
+        }
+    },
+    {
         "name": "send_email",
         "description": "Ask the Communication Manager to send an approved email. Only call this after the user has explicitly approved the draft.",
         "input_schema": {
@@ -213,8 +245,22 @@ class CEOAgent:
         self.history = []
         self.calendar = CalendarAgent()
         self.email = EmailAgent()
+        self.memory = MemoryAgent()
 
     def chat(self, user_message: str) -> str:
+        # Handle memory confirmation if one is pending
+        if self.memory.pending_memory:
+            lower = user_message.lower().strip()
+            if any(w in lower for w in ["yes", "yeah", "correct", "right", "remember that", "yep"]):
+                self.memory.confirm_pending(confirmed=True)
+                return "Got it — I'll remember that."
+            elif any(w in lower for w in ["no", "nope", "don't", "not quite", "wrong"]):
+                self.memory.confirm_pending(confirmed=False)
+                return "No problem, I won't remember that."
+            elif any(w in lower for w in ["sometimes", "situational", "depends", "only when"]):
+                self.memory.confirm_pending(confirmed=True, modification=f"{self.memory.pending_memory['value']} (situational: {user_message})")
+                return "Got it — I'll remember that as situational."
+
         self.history.append({"role": "user", "content": user_message})
 
         while True:
@@ -227,9 +273,22 @@ class CEOAgent:
             )
 
             if response.stop_reason == "end_turn":
-                reply = response.content[0].text
-                self.history.append({"role": "assistant", "content": reply})
-                return reply
+                raw_reply = response.content[0].text
+
+                # Every response goes through Memory AI for personalization
+                personalized = self.memory.personalize(
+                    response=raw_reply,
+                    context=user_message
+                )
+
+                self.history.append({"role": "assistant", "content": personalized})
+
+                # Memory AI observes the exchange and may generate a learning question
+                learning_question = self.memory.observe(user_message, personalized)
+                if learning_question:
+                    return f"{personalized}\n\n---\n_{learning_question}_"
+
+                return personalized
 
             if response.stop_reason == "tool_use":
                 tool_results = []
@@ -292,6 +351,15 @@ class CEOAgent:
             return self.email.revise_draft(
                 current_draft=block.input["current_draft"],
                 revision_instructions=block.input["revision_instructions"]
+            )
+        elif block.name == "get_memory_for_manager":
+            return self.memory.get_for_manager(block.input["manager"])
+        elif block.name == "save_memory":
+            return self.memory.save_directly(
+                category=block.input["category"],
+                key=block.input["key"],
+                value=block.input["value"],
+                context=block.input.get("context", "general")
             )
         elif block.name == "send_email":
             return self.email.send(
