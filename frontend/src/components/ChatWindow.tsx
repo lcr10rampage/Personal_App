@@ -6,6 +6,7 @@ interface Props {
   team: Team
   messages: Message[]
   onSend: (text: string) => void
+  isThinking?: boolean
 }
 
 function getGreeting() {
@@ -18,8 +19,10 @@ function getGreeting() {
 function AgentDot({ status }: { status: string }) {
   return (
     <span className={`
-      inline-block w-1.5 h-1.5 rounded-full
-      ${status === 'ready' ? 'bg-ws-green animate-pulse-dot' : 'bg-ws-text-muted'}
+      inline-block w-1.5 h-1.5 rounded-full transition-colors duration-300
+      ${status === 'ready'    ? 'bg-ws-green animate-pulse-dot' :
+        status === 'thinking' ? 'bg-ws-accent animate-pulse-dot' :
+                                'bg-ws-text-muted'}
     `} />
   )
 }
@@ -112,9 +115,8 @@ function TypingIndicator() {
   )
 }
 
-export default function ChatWindow({ team, messages, onSend }: Props) {
+export default function ChatWindow({ team, messages, onSend, isThinking = false }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
-  const isThinking = false // will be wired up later
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
