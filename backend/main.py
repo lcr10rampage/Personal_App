@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from agents.ceo import run_ceo
 from dotenv import load_dotenv
+from agents.ceo.agent import CEOAgent
 
 load_dotenv()
 
@@ -15,13 +15,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+ceo = CEOAgent()
+
 class ChatRequest(BaseModel):
     message: str
-    history: list = []
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    response = run_ceo(req.message, req.history)
+    response = ceo.chat(req.message)
     return {"response": response}
 
 @app.get("/health")

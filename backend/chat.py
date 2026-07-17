@@ -1,10 +1,9 @@
-import os
 from dotenv import load_dotenv
-from agents.ceo import run_ceo
+from agents.ceo.agent import CEOAgent
 
 load_dotenv()
 
-history = []
+ceo = CEOAgent()
 
 print("\nPersonal Life Manager")
 print("---------------------")
@@ -16,9 +15,5 @@ while True:
         continue
     if user_input.lower() == "quit":
         break
-
-    response = run_ceo(user_input, history)
+    response = ceo.chat(user_input)
     print(f"\nAssistant: {response}\n")
-
-    history.append({"role": "user", "content": user_input})
-    history.append({"role": "assistant", "content": response})
