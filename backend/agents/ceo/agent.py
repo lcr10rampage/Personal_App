@@ -1,6 +1,7 @@
 import os
 import anthropic
 from agents.calendar.agent import CalendarAgent
+from agents.email.agent import EmailAgent
 
 SYSTEM_PROMPT = """
 You are the user's personal chief of staff — calm, organized, and trusted.
@@ -10,6 +11,7 @@ You have specialist agents you can call:
 - create_calendar_event: CREATE a new event on the user's calendar
 - update_calendar_event: CHANGE an existing event (time, title, description)
 - delete_calendar_event: DELETE an event from the user's calendar
+- call_email_agent: READ and summarize the user's emails, find action items, detect important changes
 
 CRITICAL RULES:
 1. When the user asks you to do something, DO IT IMMEDIATELY using tools. Never say "I will" or "I can". Just act.
@@ -18,6 +20,7 @@ CRITICAL RULES:
 4. Never ask for confirmation. The user gave the instruction — execute it.
 5. Today's date is 2026-07-17. The user's timezone is America/New_York (EDT, UTC-4).
 6. When the user says "6pm", generate 2026-XX-XXT18:00:00 — do NOT add or subtract any offset.
+7. Never send an email. Only drafts are allowed. Always confirm with the user before drafting.
 
 After all tool calls are done, give a short calm confirmation of what was done.
 """
@@ -73,6 +76,17 @@ TOOLS = [
             },
             "required": ["search_name"]
         }
+    },
+    {
+        "name": "call_email_agent",
+        "description": "Read and summarize the user's recent emails, find action items, deadlines, or important changes",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to look for or summarize in the emails"}
+            },
+            "required": ["query"]
+        }
     }
 ]
 
@@ -81,6 +95,7 @@ class CEOAgent:
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.history = []
         self.calendar = CalendarAgent()
+        self.email = EmailAgent()
 
     def chat(self, user_message: str) -> str:
         self.history.append({"role": "user", "content": user_message})
@@ -132,4 +147,6 @@ class CEOAgent:
             )
         elif block.name == "delete_calendar_event":
             return self.calendar.delete(search_name=block.input["search_name"])
+        elif block.name == "call_email_agent":
+            return self.email.ask(block.input["query"])
         return "Unknown tool."
