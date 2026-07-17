@@ -8,7 +8,7 @@ interface Props {
 
 export default function Sidebar({ teams, activeTeamId, onSelectTeam }: Props) {
   return (
-    <div className="flex flex-col w-56 min-w-56 h-full bg-ws-sidebar border-r border-ws-border">
+    <div className="flex flex-col w-64 min-w-64 h-full bg-ws-sidebar border-r border-ws-border">
 
       {/* Header — drag region for frameless window */}
       <div className="drag-region flex items-center gap-2.5 px-4 pt-6 pb-5">
@@ -22,7 +22,7 @@ export default function Sidebar({ teams, activeTeamId, onSelectTeam }: Props) {
 
       {/* Teams label */}
       <div className="px-4 pb-2">
-        <span className="text-ws-text-muted text-[10px] font-semibold uppercase tracking-widest">
+        <span className="text-ws-text-muted text-xs font-semibold uppercase tracking-widest">
           Teams
         </span>
       </div>
@@ -57,15 +57,15 @@ export default function Sidebar({ teams, activeTeamId, onSelectTeam }: Props) {
               {/* Name + badge */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium truncate">{team.name}</span>
+                  <span className="text-base font-medium truncate">{team.name}</span>
                   {!isAvailable && (
-                    <span className="text-[9px] font-semibold text-ws-text-muted border border-ws-border rounded px-1 py-0.5 uppercase tracking-wide">
+                    <span className="text-[10px] font-semibold text-ws-text-muted border border-ws-border rounded px-1.5 py-0.5 uppercase tracking-wide">
                       Soon
                     </span>
                   )}
                 </div>
                 {isActive && (
-                  <p className="text-[11px] text-ws-text-muted truncate mt-0.5">
+                  <p className="text-xs text-ws-text-muted truncate mt-0.5">
                     {team.description}
                   </p>
                 )}
@@ -89,7 +89,7 @@ export default function Sidebar({ teams, activeTeamId, onSelectTeam }: Props) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
               d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span className="text-sm">Settings</span>
+          <span className="text-base">Settings</span>
         </button>
       </div>
     </div>

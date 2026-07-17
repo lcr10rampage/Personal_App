@@ -35,17 +35,17 @@ function WelcomeScreen({ team }: { team: Team }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 animate-fade-in">
       <div className="text-ws-accent text-4xl mb-6">{team.icon}</div>
-      <h1 className="text-ws-text-primary text-2xl font-semibold mb-2">
+      <h1 className="text-ws-text-primary text-3xl font-semibold mb-3">
         {getGreeting()}.
       </h1>
-      <p className="text-ws-text-secondary text-sm mb-10">
+      <p className="text-ws-text-secondary text-base mb-10">
         {team.description}. What would you like to work on?
       </p>
-      <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+      <div className="flex flex-wrap gap-2.5 justify-center max-w-lg">
         {suggestions.map(s => (
           <button
             key={s}
-            className="px-3.5 py-2 rounded-lg border border-ws-border text-ws-text-secondary text-sm
+            className="px-4 py-2.5 rounded-lg border border-ws-border text-ws-text-secondary text-sm
                        hover:border-ws-accent-dim hover:text-ws-text-primary hover:bg-ws-surface
                        transition-all duration-150"
           >
@@ -70,7 +70,7 @@ function MessageBubble({ message }: { message: Message }) {
       )}
       <div className={`max-w-[72%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
         <div className={`
-          px-4 py-3 rounded-2xl text-sm leading-relaxed
+          px-5 py-3.5 rounded-2xl text-base leading-relaxed
           ${isUser
             ? 'bg-ws-user text-ws-text-primary rounded-tr-sm'
             : 'bg-ws-agent text-ws-text-primary rounded-tl-sm'
@@ -126,8 +126,8 @@ export default function ChatWindow({ team, messages, onSend }: Props) {
       {/* Header */}
       <div className="drag-region flex items-center justify-between px-6 pt-5 pb-4 border-b border-ws-border bg-ws-bg">
         <div className="no-drag">
-          <h2 className="text-ws-text-primary font-semibold text-base">{team.name}</h2>
-          <p className="text-ws-text-muted text-xs mt-0.5">{team.description}</p>
+          <h2 className="text-ws-text-primary font-semibold text-lg">{team.name}</h2>
+          <p className="text-ws-text-muted text-sm mt-0.5">{team.description}</p>
         </div>
 
         {/* Agent status pills */}
@@ -136,7 +136,7 @@ export default function ChatWindow({ team, messages, onSend }: Props) {
             {team.agents.map(agent => (
               <div key={agent.id} className="flex items-center gap-1.5">
                 <AgentDot status={agent.status} />
-                <span className="text-ws-text-muted text-xs">{agent.name}</span>
+                <span className="text-ws-text-muted text-sm">{agent.name}</span>
               </div>
             ))}
           </div>

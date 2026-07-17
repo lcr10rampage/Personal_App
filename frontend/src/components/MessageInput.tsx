@@ -45,8 +45,8 @@ export default function MessageInput({ onSend, teamName }: Props) {
           onInput={handleInput}
           placeholder={`Message ${teamName}...`}
           rows={1}
-          className="flex-1 text-sm text-ws-text-primary placeholder-ws-text-muted
-                     leading-relaxed min-h-[24px] max-h-40 overflow-y-auto"
+          className="flex-1 text-base text-ws-text-primary placeholder-ws-text-muted
+                     leading-relaxed min-h-[28px] max-h-40 overflow-y-auto"
         />
         <button
           onClick={handleSend}

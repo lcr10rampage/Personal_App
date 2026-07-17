@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
+import TitleBar from './components/TitleBar'
 import { Team, Message } from './types'
 
 const TEAMS: Team[] = [
@@ -62,17 +63,20 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-ws-bg">
-      <Sidebar
-        teams={TEAMS}
-        activeTeamId={activeTeamId}
-        onSelectTeam={handleSelectTeam}
-      />
-      <ChatWindow
-        team={activeTeam}
-        messages={messages}
-        onSend={handleSend}
-      />
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-ws-bg">
+      <TitleBar />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          teams={TEAMS}
+          activeTeamId={activeTeamId}
+          onSelectTeam={handleSelectTeam}
+        />
+        <ChatWindow
+          team={activeTeam}
+          messages={messages}
+          onSend={handleSend}
+        />
+      </div>
     </div>
   )
 }

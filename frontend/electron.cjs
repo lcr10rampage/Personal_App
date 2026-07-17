@@ -1,26 +1,27 @@
-const { app, BrowserWindow, shell } = require('electron')
+const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const path = require('path')
 
 const isDev = process.env.NODE_ENV === 'development'
 
+let win
+
 function createWindow() {
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0f0e0c',
-    titleBarStyle: 'hiddenInset',
+    frame: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
     show: false,
   })
 
-  win.once('ready-to-show', () => {
-    win.show()
-  })
+  win.once('ready-to-show', () => win.show())
 
   if (isDev) {
     win.loadURL('http://localhost:5173')
@@ -33,6 +34,10 @@ function createWindow() {
     return { action: 'deny' }
   })
 }
+
+ipcMain.on('window-minimize', () => win?.minimize())
+ipcMain.on('window-maximize', () => win?.isMaximized() ? win.unmaximize() : win.maximize())
+ipcMain.on('window-close',    () => win?.close())
 
 app.whenReady().then(createWindow)
 
