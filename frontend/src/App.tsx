@@ -22,10 +22,15 @@ const TEAMS: Team[] = [
   {
     id: 'app_builder',
     name: 'App Builder',
-    description: 'Design and build applications',
+    description: 'Design, build, review, and test applications',
     icon: '⬡',
-    available: false,
-    agents: [],
+    available: true,
+    agents: [
+      { id: 'architect', name: 'Architect', status: 'ready' },
+      { id: 'engineer',  name: 'Engineer', status: 'ready' },
+      { id: 'manager',   name: 'Manager', status: 'ready' },
+      { id: 'tester',    name: 'Tester', status: 'ready' },
+    ],
   },
   {
     id: 'website_builder',
@@ -65,7 +70,7 @@ export default function App() {
     setIsThinking(true)
 
     try {
-      const response = await sendMessage(text)
+      const response = await sendMessage(text, teamId)
       addMessage(teamId, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -89,7 +94,7 @@ export default function App() {
     if (team?.available) setActiveTeamId(teamId)
   }
 
-  const activeAgents = isThinking && activeTeamId === 'life_manager'
+  const activeAgents = isThinking
     ? activeTeam.agents.map((a, i) => ({ ...a, status: i === 0 ? 'thinking' as const : a.status }))
     : activeTeam.agents
 

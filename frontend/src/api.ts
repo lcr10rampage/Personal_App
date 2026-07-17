@@ -1,10 +1,10 @@
 const API_URL = 'http://localhost:8000'
 
-export async function sendMessage(message: string): Promise<string> {
+export async function sendMessage(message: string, team: string = 'life_manager'): Promise<string> {
   const res = await fetch(`${API_URL}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, team }),
   })
 
   if (!res.ok) {
