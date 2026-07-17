@@ -3,7 +3,8 @@ import anthropic
 import json
 from agents.calendar.google_client import (
     fetch_upcoming_events, create_event, update_event, delete_event,
-    check_conflicts, get_rsvp_pending, respond_to_rsvp
+    check_conflicts, get_rsvp_pending, respond_to_rsvp,
+    search_events_by_name, delete_event_by_id, update_event_by_id
 )
 
 SYSTEM_PROMPT = """
@@ -47,6 +48,24 @@ class CalendarAgent:
 
     def delete(self, search_name: str) -> str:
         return delete_event(search_name)
+
+    def search(self, name: str) -> str:
+        matches = search_events_by_name(name)
+        if not matches:
+            return f"No upcoming events found matching '{name}'."
+        if len(matches) == 1:
+            e = matches[0]
+            return f"Found 1 match: '{e['summary']}' | {e['start']} to {e['end']} | ID: {e['event_id']}"
+        lines = [f"Found {len(matches)} matches:"]
+        for i, e in enumerate(matches, 1):
+            lines.append(f"  {i}. '{e['summary']}' | {e['start']} to {e['end']} | ID: {e['event_id']}")
+        return "\n".join(lines)
+
+    def delete_by_id(self, event_id: str, summary: str) -> str:
+        return delete_event_by_id(event_id, summary)
+
+    def update_by_id(self, event_id: str, new_summary=None, new_start=None, new_end=None, new_description=None) -> str:
+        return update_event_by_id(event_id, new_summary, new_start, new_end, new_description)
 
     def conflicts(self, start_datetime: str, end_datetime: str) -> str:
         return check_conflicts(start_datetime, end_datetime)

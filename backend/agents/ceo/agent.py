@@ -4,40 +4,81 @@ from agents.calendar.agent import CalendarAgent
 from agents.email.agent import EmailAgent
 
 SYSTEM_PROMPT = """
-You are the Orchestrator — the user's personal chief of staff. You are calm, organized, and trusted.
+You are the Orchestrator — the user's personal chief of staff. Calm, organized, and trusted.
 
-Your job is to coordinate specialist managers, combine their findings, and present one clear response to the user.
-You do not own any data yourself. You route, coordinate, resolve conflicts, and communicate.
+Your job: coordinate specialist managers, combine their findings, deliver one clear response.
+You do not own data. You route, coordinate, resolve conflicts, and communicate.
 
-Specialist managers available:
-- call_calendar_agent: READ the user's schedule, check availability, find conflicts
-- create_calendar_event: CREATE a new event
-- update_calendar_event: CHANGE an existing event (time, title, description)
-- delete_calendar_event: DELETE an event
-- check_calendar_conflicts: CHECK if a time slot conflicts with existing events
-- get_rsvp_pending: CHECK for events that need the user's RSVP response
-- respond_to_rsvp: SUBMIT the user's RSVP response (accepted / declined / tentative)
-- call_email_agent: READ and summarize emails, find action items, detect important changes
+---
 
-CRITICAL RULES:
-1. When the user asks you to do something, DO IT IMMEDIATELY using tools. Never say "I will" or "I can". Just act.
-2. If a task requires multiple steps, call tools one at a time until all steps are done.
-3. Before creating any event, ALWAYS call check_calendar_conflicts first.
-   - If "no_conflicts" → create the event immediately.
-   - If conflicts found → STOP, tell the user what overlaps, ask: "Would you like me to reschedule [event] to fit, or delete it entirely?" Wait for their answer.
-4. When a manager returns a structured finding with "requires_approval: true", STOP and present it to the user clearly. Wait for their decision before acting.
-5. When get_rsvp_pending returns pending RSVPs, present each one to the user and ask: "Can you make it? Yes, No, or Maybe?" Then call respond_to_rsvp with their answer.
-6. Never send an email. Only drafts are allowed.
-7. Today's date is 2026-07-17. The user's timezone is America/New_York (EDT, UTC-4).
-8. When the user says a time like "6pm", generate 2026-XX-XXT18:00:00 — do NOT apply any timezone offset manually.
+## PROCESSING RULES — Follow these exactly, in order.
 
-After completing all actions, give a short calm summary of what was done.
+### Rule 1: Multiple instructions = one at a time
+When the user gives more than one instruction in a single message:
+- Mentally number each task: Task 1, Task 2, Task 3...
+- Complete Task 1 fully (all tool calls done, result confirmed) before starting Task 2.
+- Never attempt two tasks simultaneously.
+
+### Rule 2: Search before delete or update
+When deleting or updating a calendar event:
+- FIRST call search_calendar_events with the event name.
+- If 0 results → tell the user nothing was found.
+- If 1 result → confirm the exact event name and time to the user, then execute immediately.
+- If 2+ results → list all matches and ask: "Which one did you mean?" Wait for their answer.
+- NEVER delete or update without knowing the exact event_id first.
+
+### Rule 3: Check conflicts before creating
+Before creating any event, call check_calendar_conflicts.
+- "no_conflicts" → create immediately.
+- Conflicts found → STOP. Tell the user what overlaps. Ask: "Reschedule [event] to fit, or delete it entirely?" Wait for answer, then execute.
+
+### Rule 4: RSVP requires approval
+When get_rsvp_pending returns items with requires_approval: true:
+- STOP. Present each pending RSVP to the user one at a time.
+- Ask: "Can you make it to [event name] on [date]? Yes, No, or Maybe?"
+- Call respond_to_rsvp only after the user answers.
+
+### Rule 5: Act, don't narrate
+Never say "I will" or "I'm going to". Use tools immediately.
+After all tools complete, give one short calm summary of what was done.
+
+### Rule 6: Time and date
+Today is 2026-07-17. Timezone: America/New_York (EDT, UTC-4).
+When the user says "6pm" → generate T18:00:00. Do NOT apply any offset manually.
+
+### Rule 7: Email safety
+Never send an email. Create drafts only. Always show the draft to the user first.
+
+---
+
+## AVAILABLE TOOLS
+
+- search_calendar_events — search by name, returns all matches with event_id. Use before delete/update.
+- call_calendar_agent — read schedule, check availability
+- create_calendar_event — create a new event
+- update_calendar_event_by_id — update using exact event_id (get this from search first)
+- delete_calendar_event_by_id — delete using exact event_id (get this from search first)
+- check_calendar_conflicts — check if a time slot is free
+- get_rsvp_pending — check for events needing RSVP
+- respond_to_rsvp — submit RSVP response
+- call_email_agent — read and summarize emails
 """
 
 TOOLS = [
     {
+        "name": "search_calendar_events",
+        "description": "Search for calendar events by name. Returns all matches with their event_id, summary, start, and end. Always call this before deleting or updating an event.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Event name or partial name to search for"}
+            },
+            "required": ["name"]
+        }
+    },
+    {
         "name": "call_calendar_agent",
-        "description": "Read the user's upcoming calendar events, check availability, or find conflicts",
+        "description": "Read the user's upcoming calendar events, check availability, or answer schedule questions",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -48,7 +89,7 @@ TOOLS = [
     },
     {
         "name": "create_calendar_event",
-        "description": "Create a new event on the user's Google Calendar",
+        "description": "Create a new event on the user's Google Calendar. Always check conflicts first.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -61,46 +102,47 @@ TOOLS = [
         }
     },
     {
-        "name": "update_calendar_event",
-        "description": "Update an existing event — change its time, title, or description",
+        "name": "update_calendar_event_by_id",
+        "description": "Update a calendar event using its exact event_id. Get the event_id from search_calendar_events first.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "search_name": {"type": "string"},
+                "event_id": {"type": "string"},
                 "new_summary": {"type": "string"},
                 "new_start_datetime": {"type": "string"},
                 "new_end_datetime": {"type": "string"},
                 "new_description": {"type": "string"}
             },
-            "required": ["search_name"]
+            "required": ["event_id"]
         }
     },
     {
-        "name": "delete_calendar_event",
-        "description": "Delete an existing event from the user's calendar",
+        "name": "delete_calendar_event_by_id",
+        "description": "Delete a calendar event using its exact event_id. Get the event_id from search_calendar_events first.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "search_name": {"type": "string"}
+                "event_id": {"type": "string"},
+                "summary": {"type": "string", "description": "Event name, used for confirmation message"}
             },
-            "required": ["search_name"]
+            "required": ["event_id", "summary"]
         }
     },
     {
         "name": "check_calendar_conflicts",
-        "description": "Check if a proposed time slot conflicts with existing calendar events. Always call this before creating a new event.",
+        "description": "Check if a proposed time slot conflicts with existing events. Always call before creating.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "start_datetime": {"type": "string", "description": "Proposed start time in ISO 8601, e.g. 2026-07-18T15:00:00"},
-                "end_datetime": {"type": "string", "description": "Proposed end time in ISO 8601, e.g. 2026-07-18T16:00:00"}
+                "start_datetime": {"type": "string"},
+                "end_datetime": {"type": "string"}
             },
             "required": ["start_datetime", "end_datetime"]
         }
     },
     {
         "name": "get_rsvp_pending",
-        "description": "Check for calendar events that need the user's RSVP. Returns a structured finding with requires_approval set to true if any are found.",
+        "description": "Check for calendar events that need the user's RSVP.",
         "input_schema": {
             "type": "object",
             "properties": {}
@@ -112,7 +154,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "event_id": {"type": "string", "description": "The event ID from the RSVP finding"},
+                "event_id": {"type": "string"},
                 "response": {"type": "string", "description": "accepted, declined, or tentative"}
             },
             "required": ["event_id", "response"]
@@ -120,11 +162,11 @@ TOOLS = [
     },
     {
         "name": "call_email_agent",
-        "description": "Read and summarize the user's recent emails, find action items, deadlines, or important changes",
+        "description": "Read and summarize recent emails, find action items, deadlines, or important changes",
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "What to look for or summarize in the emails"}
+                "query": {"type": "string"}
             },
             "required": ["query"]
         }
@@ -144,7 +186,7 @@ class CEOAgent:
         while True:
             response = self.client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=1024,
+                max_tokens=2048,
                 system=SYSTEM_PROMPT,
                 tools=TOOLS,
                 messages=self.history
@@ -169,7 +211,9 @@ class CEOAgent:
                 self.history.append({"role": "user", "content": tool_results})
 
     def _handle_tool(self, block) -> str:
-        if block.name == "call_calendar_agent":
+        if block.name == "search_calendar_events":
+            return self.calendar.search(block.input["name"])
+        elif block.name == "call_calendar_agent":
             return self.calendar.ask(block.input["query"])
         elif block.name == "create_calendar_event":
             return self.calendar.create(
@@ -178,16 +222,19 @@ class CEOAgent:
                 end_datetime=block.input["end_datetime"],
                 description=block.input.get("description", "")
             )
-        elif block.name == "update_calendar_event":
-            return self.calendar.update(
-                search_name=block.input["search_name"],
+        elif block.name == "update_calendar_event_by_id":
+            return self.calendar.update_by_id(
+                event_id=block.input["event_id"],
                 new_summary=block.input.get("new_summary"),
                 new_start=block.input.get("new_start_datetime"),
                 new_end=block.input.get("new_end_datetime"),
                 new_description=block.input.get("new_description")
             )
-        elif block.name == "delete_calendar_event":
-            return self.calendar.delete(search_name=block.input["search_name"])
+        elif block.name == "delete_calendar_event_by_id":
+            return self.calendar.delete_by_id(
+                event_id=block.input["event_id"],
+                summary=block.input["summary"]
+            )
         elif block.name == "check_calendar_conflicts":
             return self.calendar.conflicts(
                 start_datetime=block.input["start_datetime"],

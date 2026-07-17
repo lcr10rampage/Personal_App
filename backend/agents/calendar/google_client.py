@@ -49,6 +49,48 @@ def find_event(service, name: str):
             return e
     return None
 
+def search_events_by_name(name: str) -> list:
+    service = get_service()
+    now = datetime.now(timezone.utc).isoformat()
+    result = service.events().list(
+        calendarId="primary",
+        timeMin=now,
+        maxResults=50,
+        singleEvents=True,
+        orderBy="startTime"
+    ).execute()
+    matches = []
+    for e in result.get("items", []):
+        if name.lower() in e.get("summary", "").lower():
+            start = e["start"].get("dateTime", e["start"].get("date"))
+            end = e["end"].get("dateTime", e["end"].get("date"))
+            matches.append({
+                "event_id": e["id"],
+                "summary": e.get("summary", "(no title)"),
+                "start": start,
+                "end": end
+            })
+    return matches
+
+def delete_event_by_id(event_id: str, summary: str) -> str:
+    service = get_service()
+    service.events().delete(calendarId="primary", eventId=event_id).execute()
+    return f"Deleted '{summary}'."
+
+def update_event_by_id(event_id: str, new_summary: str = None, new_start: str = None, new_end: str = None, new_description: str = None) -> str:
+    service = get_service()
+    event = service.events().get(calendarId="primary", eventId=event_id).execute()
+    if new_summary:
+        event["summary"] = new_summary
+    if new_start:
+        event["start"] = {"dateTime": new_start, "timeZone": "America/New_York"}
+    if new_end:
+        event["end"] = {"dateTime": new_end, "timeZone": "America/New_York"}
+    if new_description is not None:
+        event["description"] = new_description
+    updated = service.events().update(calendarId="primary", eventId=event_id, body=event).execute()
+    return f"Updated '{updated['summary']}'."
+
 def create_event(summary: str, start_datetime: str, end_datetime: str, description: str = "") -> str:
     service = get_service()
     event = {
