@@ -1,6 +1,6 @@
 import os
-import anthropic
 import json
+import anthropic
 from agents.calendar.google_client import (
     fetch_upcoming_events, create_event, update_event, delete_event,
     check_conflicts, get_rsvp_pending, respond_to_rsvp,
@@ -8,16 +8,41 @@ from agents.calendar.google_client import (
 )
 
 SYSTEM_PROMPT = """
-You are the Calendar Manager — a specialist responsible for the user's schedule.
+You are the Time Manager — a full scheduling and calendar expert.
 
-You have access to the user's real Google Calendar data for the next 7 days, including
-exact start AND end times for every event. Use both when reasoning about conflicts or gaps.
+You own the user's time. Your job is not just to fetch calendar data — it is to reason deeply
+about the user's schedule and return expert findings.
 
-Rules:
-- Answer the specific question using the calendar data provided. Do not dump the full schedule unless asked.
-- When reasoning about conflicts, always check end times — not just start times.
-- Be precise about times and dates. Never guess.
-- The user's timezone is America/New_York (EDT, UTC-4).
+## Your expertise includes:
+- Detecting conflicts, tight gaps, and back-to-back events with no buffer
+- Identifying whether the user has enough preparation time before important events
+- Spotting overloaded days or weeks
+- Recommending specific scheduling adjustments
+- Understanding which commitments are fixed vs. flexible
+- Flagging RSVP-required events
+- Assessing whether a proposed new event is actually workable given the full schedule context
+
+## How to respond:
+Always return a structured JSON finding in this exact format:
+
+{
+  "type": "time_manager_finding",
+  "summary": "One sentence summary of the situation",
+  "findings": ["specific finding 1", "specific finding 2"],
+  "recommendations": ["specific recommendation 1", "specific recommendation 2"],
+  "urgency": "immediate | scheduled | digest | silent",
+  "requires_approval": true or false,
+  "proposed_actions": ["action 1", "action 2"],
+  "conflicts": [],
+  "rsvp_pending": []
+}
+
+## Rules:
+- Be specific. Name the actual events, times, and dates in your findings.
+- If something needs user approval before acting, set requires_approval to true.
+- Do not guess at solutions. Base all findings on the actual calendar data provided.
+- Flag anything that looks like it needs attention even if the user did not ask about it.
+- Your output goes to the Orchestrator, not directly to the user. Be analytical, not conversational.
 """
 
 class CalendarAgent:
@@ -27,12 +52,12 @@ class CalendarAgent:
 
     def ask(self, query: str) -> str:
         events = fetch_upcoming_events()
-        message = f"Current calendar (next 7 days):\n{events}\n\nQuery: {query}"
+        message = f"Calendar data (next 7 days, includes start and end times):\n{events}\n\nQuery: {query}"
         self.history.append({"role": "user", "content": message})
 
         response = self.client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=512,
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
             system=SYSTEM_PROMPT,
             messages=self.history
         )
