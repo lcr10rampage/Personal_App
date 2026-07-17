@@ -4,29 +4,34 @@ from agents.calendar.agent import CalendarAgent
 from agents.email.agent import EmailAgent
 
 SYSTEM_PROMPT = """
-You are the user's personal chief of staff — calm, organized, and trusted.
+You are the Orchestrator — the user's personal chief of staff. You are calm, organized, and trusted.
 
-You have specialist agents you can call:
+Your job is to coordinate specialist managers, combine their findings, and present one clear response to the user.
+You do not own any data yourself. You route, coordinate, resolve conflicts, and communicate.
+
+Specialist managers available:
 - call_calendar_agent: READ the user's schedule, check availability, find conflicts
-- create_calendar_event: CREATE a new event on the user's calendar
+- create_calendar_event: CREATE a new event
 - update_calendar_event: CHANGE an existing event (time, title, description)
-- delete_calendar_event: DELETE an event from the user's calendar
-- call_email_agent: READ and summarize the user's emails, find action items, detect important changes
+- delete_calendar_event: DELETE an event
+- check_calendar_conflicts: CHECK if a time slot conflicts with existing events
+- get_rsvp_pending: CHECK for events that need the user's RSVP response
+- respond_to_rsvp: SUBMIT the user's RSVP response (accepted / declined / tentative)
+- call_email_agent: READ and summarize emails, find action items, detect important changes
 
 CRITICAL RULES:
 1. When the user asks you to do something, DO IT IMMEDIATELY using tools. Never say "I will" or "I can". Just act.
 2. If a task requires multiple steps, call tools one at a time until all steps are done.
-3. When the user says "get rid of anything in the way", check the schedule then delete every conflicting event.
-4. Never ask for confirmation. The user gave the instruction — execute it.
-5. Today's date is 2026-07-17. The user's timezone is America/New_York (EDT, UTC-4).
-6. When the user says "6pm", generate 2026-XX-XXT18:00:00 — do NOT add or subtract any offset.
-7. Never send an email. Only drafts are allowed. Always confirm with the user before drafting.
-8. Before creating any event, ALWAYS call check_calendar_conflicts first with the proposed start and end time.
-   - If the result is "no_conflicts", proceed to create the event immediately.
-   - If conflicts are found, STOP and tell the user exactly what overlaps, then ask: "Would you like me to reschedule [conflicting event] to fit, or delete it entirely?" Wait for their answer before doing anything.
-9. When the user answers the conflict question, execute their choice immediately using the appropriate tool.
+3. Before creating any event, ALWAYS call check_calendar_conflicts first.
+   - If "no_conflicts" → create the event immediately.
+   - If conflicts found → STOP, tell the user what overlaps, ask: "Would you like me to reschedule [event] to fit, or delete it entirely?" Wait for their answer.
+4. When a manager returns a structured finding with "requires_approval: true", STOP and present it to the user clearly. Wait for their decision before acting.
+5. When get_rsvp_pending returns pending RSVPs, present each one to the user and ask: "Can you make it? Yes, No, or Maybe?" Then call respond_to_rsvp with their answer.
+6. Never send an email. Only drafts are allowed.
+7. Today's date is 2026-07-17. The user's timezone is America/New_York (EDT, UTC-4).
+8. When the user says a time like "6pm", generate 2026-XX-XXT18:00:00 — do NOT apply any timezone offset manually.
 
-After all tool calls are done, give a short calm confirmation of what was done.
+After completing all actions, give a short calm summary of what was done.
 """
 
 TOOLS = [
@@ -91,6 +96,26 @@ TOOLS = [
                 "end_datetime": {"type": "string", "description": "Proposed end time in ISO 8601, e.g. 2026-07-18T16:00:00"}
             },
             "required": ["start_datetime", "end_datetime"]
+        }
+    },
+    {
+        "name": "get_rsvp_pending",
+        "description": "Check for calendar events that need the user's RSVP. Returns a structured finding with requires_approval set to true if any are found.",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "respond_to_rsvp",
+        "description": "Submit the user's RSVP response for a calendar event.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string", "description": "The event ID from the RSVP finding"},
+                "response": {"type": "string", "description": "accepted, declined, or tentative"}
+            },
+            "required": ["event_id", "response"]
         }
     },
     {
@@ -167,6 +192,13 @@ class CEOAgent:
             return self.calendar.conflicts(
                 start_datetime=block.input["start_datetime"],
                 end_datetime=block.input["end_datetime"]
+            )
+        elif block.name == "get_rsvp_pending":
+            return self.calendar.get_rsvp_findings()
+        elif block.name == "respond_to_rsvp":
+            return self.calendar.respond_rsvp(
+                event_id=block.input["event_id"],
+                response=block.input["response"]
             )
         elif block.name == "call_email_agent":
             return self.email.ask(block.input["query"])

@@ -76,6 +76,47 @@ def update_event(search_name: str, new_summary: str = None, new_start: str = Non
     updated = service.events().update(calendarId="primary", eventId=event["id"], body=event).execute()
     return f"Updated '{updated['summary']}'."
 
+def get_rsvp_pending() -> list:
+    service = get_service()
+    now = datetime.now(timezone.utc)
+    time_max = (now + timedelta(days=30)).isoformat()
+    result = service.events().list(
+        calendarId="primary",
+        timeMin=now.isoformat(),
+        timeMax=time_max,
+        maxResults=50,
+        singleEvents=True,
+        orderBy="startTime"
+    ).execute()
+
+    pending = []
+    for e in result.get("items", []):
+        attendees = e.get("attendees", [])
+        for a in attendees:
+            if a.get("self") and a.get("responseStatus") == "needsAction":
+                start = e["start"].get("dateTime", e["start"].get("date"))
+                end = e["end"].get("dateTime", e["end"].get("date"))
+                pending.append({
+                    "event_id": e["id"],
+                    "summary": e.get("summary", "(no title)"),
+                    "start": start,
+                    "end": end,
+                    "organizer": e.get("organizer", {}).get("email", "unknown")
+                })
+    return pending
+
+def respond_to_rsvp(event_id: str, response: str) -> str:
+    service = get_service()
+    event = service.events().get(calendarId="primary", eventId=event_id).execute()
+    attendees = event.get("attendees", [])
+    for a in attendees:
+        if a.get("self"):
+            a["responseStatus"] = response  # "accepted", "declined", or "tentative"
+    event["attendees"] = attendees
+    service.events().update(calendarId="primary", eventId=event_id, body=event).execute()
+    label = {"accepted": "accepted", "declined": "declined", "tentative": "marked as maybe"}.get(response, response)
+    return f"RSVP {label} for event ID {event_id}."
+
 def check_conflicts(start_datetime: str, end_datetime: str) -> str:
     service = get_service()
     result = service.events().list(

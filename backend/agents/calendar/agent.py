@@ -1,7 +1,9 @@
 import os
 import anthropic
+import json
 from agents.calendar.google_client import (
-    fetch_upcoming_events, create_event, update_event, delete_event, check_conflicts
+    fetch_upcoming_events, create_event, update_event, delete_event,
+    check_conflicts, get_rsvp_pending, respond_to_rsvp
 )
 
 SYSTEM_PROMPT = """
@@ -48,3 +50,23 @@ class CalendarAgent:
 
     def conflicts(self, start_datetime: str, end_datetime: str) -> str:
         return check_conflicts(start_datetime, end_datetime)
+
+    def get_rsvp_findings(self) -> str:
+        pending = get_rsvp_pending()
+        if not pending:
+            return json.dumps({
+                "type": "rsvp_check",
+                "summary": "No pending RSVPs.",
+                "requires_approval": False,
+                "items": []
+            })
+        return json.dumps({
+            "type": "rsvp_check",
+            "summary": f"{len(pending)} event(s) need your RSVP.",
+            "requires_approval": True,
+            "urgency": "scheduled",
+            "items": pending
+        })
+
+    def respond_rsvp(self, event_id: str, response: str) -> str:
+        return respond_to_rsvp(event_id, response)
