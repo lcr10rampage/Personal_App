@@ -52,8 +52,13 @@ After all tools complete, give one short calm summary of what was done.
 Today is 2026-07-17. Timezone: America/New_York (EDT, UTC-4).
 "6pm" → T18:00:00. Do NOT apply any offset manually.
 
-### Rule 9: Email safety
-Never send an email. Drafts only. Always show the draft to the user before creating it.
+### Rule 9: Email drafting — always delegate, never write yourself
+You must NEVER write email content yourself. Ever.
+- User wants a draft → call draft_email immediately. The Communication Manager writes it.
+- Show the returned draft to the user exactly as written. Ask: "Ready to send, or would you like changes?"
+- User wants changes → call revise_email_draft with the full current draft and their instructions. Communication Manager rewrites it.
+- User approves → call send_email. Communication Manager sends it.
+- You are the coordinator. The Communication Manager is the writer.
 """
 
 TOOLS = [
@@ -154,13 +159,50 @@ TOOLS = [
     },
     {
         "name": "call_email_agent",
-        "description": "Read and summarize recent emails, find action items, deadlines, or important changes",
+        "description": "Ask the Communication Manager to analyze emails, find action items, deadlines, or summarize the inbox",
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string"}
             },
             "required": ["query"]
+        }
+    },
+    {
+        "name": "draft_email",
+        "description": "Ask the Communication Manager to write an email draft. Returns the full draft for user review. Never write email content yourself — always use this tool.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "context": {"type": "string", "description": "What email this is replying to or what situation prompted it"},
+                "instructions": {"type": "string", "description": "What the email should say, tone, and any specific details"}
+            },
+            "required": ["context", "instructions"]
+        }
+    },
+    {
+        "name": "revise_email_draft",
+        "description": "Ask the Communication Manager to revise the current draft based on user feedback. Pass the full current draft and the requested changes.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "current_draft": {"type": "string", "description": "The full current draft JSON"},
+                "revision_instructions": {"type": "string", "description": "What the user wants changed"}
+            },
+            "required": ["current_draft", "revision_instructions"]
+        }
+    },
+    {
+        "name": "send_email",
+        "description": "Ask the Communication Manager to send an approved email. Only call this after the user has explicitly approved the draft.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string"},
+                "subject": {"type": "string"},
+                "body": {"type": "string"}
+            },
+            "required": ["to", "subject", "body"]
         }
     }
 ]
@@ -241,4 +283,20 @@ class CEOAgent:
             )
         elif block.name == "call_email_agent":
             return self.email.ask(block.input["query"])
+        elif block.name == "draft_email":
+            return self.email.write_draft(
+                context=block.input["context"],
+                instructions=block.input["instructions"]
+            )
+        elif block.name == "revise_email_draft":
+            return self.email.revise_draft(
+                current_draft=block.input["current_draft"],
+                revision_instructions=block.input["revision_instructions"]
+            )
+        elif block.name == "send_email":
+            return self.email.send(
+                to=block.input["to"],
+                subject=block.input["subject"],
+                body=block.input["body"]
+            )
         return "Unknown tool."

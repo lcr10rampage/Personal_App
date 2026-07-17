@@ -6,7 +6,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.compose"
+    "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/gmail.send"
 ]
 
 def get_service():
@@ -83,4 +84,14 @@ def create_draft(to: str, subject: str, body: str) -> str:
         userId="me",
         body={"message": {"raw": encoded}}
     ).execute()
-    return f"Draft created with ID: {draft['id']}"
+    return f"Draft saved with ID: {draft['id']}"
+
+def send_email(to: str, subject: str, body: str) -> str:
+    service = get_service()
+    message_text = f"To: {to}\nSubject: {subject}\n\n{body}"
+    encoded = base64.urlsafe_b64encode(message_text.encode("utf-8")).decode("utf-8")
+    service.users().messages().send(
+        userId="me",
+        body={"raw": encoded}
+    ).execute()
+    return f"Email sent to {to} — Subject: {subject}"
