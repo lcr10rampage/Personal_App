@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from agents.ceo.agent import CEOAgent
 from teams.app_builder.agent import AppBuilderTeam
+from teams.hobby_project.agent import HobbyProjectTeam
 
 load_dotenv()
 
@@ -20,6 +21,7 @@ app.add_middleware(
 TEAMS = {
     "life_manager": CEOAgent(),
     "app_builder": AppBuilderTeam(),
+    "hobby_project": HobbyProjectTeam(),
 }
 
 class ChatRequest(BaseModel):
