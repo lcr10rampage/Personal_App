@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Team, Message } from '../types'
 import MessageInput from './MessageInput'
 
@@ -60,6 +62,47 @@ function WelcomeScreen({ team }: { team: Team }) {
   )
 }
 
+// Renders assistant markdown (headings, lists, tables, bold, code) themed to the workspace palette.
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="text-[15px] leading-relaxed text-ws-text-primary space-y-3
+                    [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => <h1 className="text-lg font-semibold text-ws-text-primary mt-4 mb-2">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-semibold text-ws-text-primary mt-4 mb-2">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-[15px] font-semibold text-ws-text-primary mt-3 mb-1.5">{children}</h3>,
+          p:  ({ children }) => <p className="my-2">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc pl-5 my-2 space-y-1 marker:text-ws-accent-dim">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-1 marker:text-ws-text-muted">{children}</ol>,
+          li: ({ children }) => <li className="pl-1">{children}</li>,
+          strong: ({ children }) => <strong className="font-semibold text-ws-text-primary">{children}</strong>,
+          em: ({ children }) => <em className="italic text-ws-text-secondary">{children}</em>,
+          a:  ({ children, href }) => <a href={href} className="text-ws-accent underline underline-offset-2 hover:text-ws-text-primary">{children}</a>,
+          blockquote: ({ children }) => <blockquote className="border-l-2 border-ws-accent pl-3 my-2 text-ws-text-secondary italic">{children}</blockquote>,
+          hr: () => <hr className="border-ws-border my-4" />,
+          code: ({ className, children }) =>
+            className?.includes('language-')
+              ? <code className={className}>{children}</code>
+              : <code className="bg-ws-elevated text-ws-accent px-1.5 py-0.5 rounded text-[13px]">{children}</code>,
+          pre: ({ children }) => <pre className="bg-ws-bg border border-ws-border rounded-lg p-3 my-2 overflow-x-auto text-[13px] leading-relaxed">{children}</pre>,
+          table: ({ children }) => (
+            <div className="my-3 overflow-x-auto rounded-lg border border-ws-border">
+              <table className="w-full border-collapse text-sm">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead className="bg-ws-surface">{children}</thead>,
+          th: ({ children }) => <th className="text-left font-semibold text-ws-text-primary px-3 py-2 border-b border-ws-border">{children}</th>,
+          td: ({ children }) => <td className="px-3 py-2 border-b border-ws-border/60 align-top text-ws-text-secondary">{children}</td>,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user'
 
@@ -71,15 +114,15 @@ function MessageBubble({ message }: { message: Message }) {
           AI
         </div>
       )}
-      <div className={`max-w-[72%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+      <div className={`${isUser ? 'max-w-[72%] items-end' : 'max-w-[85%] items-start'} flex flex-col min-w-0`}>
         <div className={`
           px-5 py-3.5 rounded-2xl text-base leading-relaxed
           ${isUser
             ? 'bg-ws-user text-ws-text-primary rounded-tr-sm'
-            : 'bg-ws-agent text-ws-text-primary rounded-tl-sm'
+            : 'bg-ws-agent text-ws-text-primary rounded-tl-sm w-full'
           }
         `}>
-          {message.content}
+          {isUser ? message.content : <MarkdownContent content={message.content} />}
         </div>
         <span className="text-ws-text-muted text-[10px] mt-1.5 px-1">
           {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
