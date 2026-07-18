@@ -106,12 +106,12 @@ TOOLS = [
     },
     {
         "name": "save_deliverable",
-        "description": "Save a specialist deliverable into a workspace (e.g. filename 'measurements.md').",
+        "description": "Save a specialist deliverable into a workspace. 'filename' must be a bare name only, e.g. 'measurements.md', 'sketches.svg', or 'model.html' — NEVER include the workspace name or any path. The interactive 3D model must always be saved as exactly 'model.html' (overwriting the previous one) so its URL stays stable.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "workspace": {"type": "string"},
-                "filename": {"type": "string"},
+                "filename": {"type": "string", "description": "Bare filename only, e.g. 'model.html'"},
                 "content": {"type": "string"},
             },
             "required": ["workspace", "filename", "content"],
@@ -220,6 +220,12 @@ class HobbyProjectTeam:
 
     def _save_deliverable(self, workspace: str, filename: str, content: str) -> str:
         d = self._workspace_dir(workspace)
+        # Guard against the model jamming the workspace name / a path into the filename:
+        # keep only the base name, and strip a leading workspace-slug prefix if present.
+        filename = os.path.basename(filename.strip())
+        slug = _slug(workspace)
+        if filename.startswith(slug) and filename != slug:
+            filename = filename[len(slug):].lstrip("-_") or filename
         safe = _safe_path(d, filename)
         if not safe:
             return "Invalid filename."
