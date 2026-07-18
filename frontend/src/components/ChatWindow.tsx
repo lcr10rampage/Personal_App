@@ -29,13 +29,28 @@ function AgentDot({ status }: { status: string }) {
   )
 }
 
-function WelcomeScreen({ team }: { team: Team }) {
-  const suggestions = [
+const SUGGESTIONS: Record<string, string[]> = {
+  life_manager: [
     'What\'s on my schedule today?',
     'Check my emails',
     'Any RSVPs pending?',
     'Help me plan my week',
-  ]
+  ],
+  app_builder: [
+    'Start a new app project',
+    'Review my current design',
+    'What stage are we in?',
+  ],
+  hobby_project: [
+    'Plan a garage workbench',
+    'Help me get into fishing',
+    'Design a shed for my backyard',
+    'Plan a cargo trailer camper build',
+  ],
+}
+
+function WelcomeScreen({ team, onSend }: { team: Team; onSend: (text: string) => void }) {
+  const suggestions = SUGGESTIONS[team.id] ?? []
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 animate-fade-in">
@@ -43,13 +58,14 @@ function WelcomeScreen({ team }: { team: Team }) {
       <h1 className="text-ws-text-primary text-3xl font-semibold mb-3">
         {getGreeting()}.
       </h1>
-      <p className="text-ws-text-secondary text-base mb-10">
+      <p className="text-ws-text-secondary text-base mb-10 text-center max-w-md">
         {team.description}. What would you like to work on?
       </p>
       <div className="flex flex-wrap gap-2.5 justify-center max-w-lg">
         {suggestions.map(s => (
           <button
             key={s}
+            onClick={() => onSend(s)}
             className="px-4 py-2.5 rounded-lg border border-ws-border text-ws-text-secondary text-sm
                        hover:border-ws-accent-dim hover:text-ws-text-primary hover:bg-ws-surface
                        transition-all duration-150"
@@ -169,29 +185,38 @@ export default function ChatWindow({ team, messages, onSend, isThinking = false 
     <div className="flex flex-col flex-1 h-full overflow-hidden">
 
       {/* Header */}
-      <div className="drag-region flex items-center justify-between px-6 pt-5 pb-4 border-b border-ws-border bg-ws-bg">
-        <div className="no-drag">
-          <h2 className="text-ws-text-primary font-semibold text-lg">{team.name}</h2>
-          <p className="text-ws-text-muted text-sm mt-0.5">{team.description}</p>
+      <div className="drag-region flex items-center justify-between gap-4 px-6 pt-4 pb-3 border-b border-ws-border bg-ws-bg">
+        <div className="no-drag min-w-0">
+          <h2 className="text-ws-text-primary font-semibold text-sm truncate">{team.name}</h2>
+          <p className="text-ws-text-muted text-xs mt-0.5 truncate">{team.description}</p>
         </div>
 
-        {/* Agent status pills */}
-        {team.available && (
-          <div className="no-drag flex items-center gap-3">
-            {team.agents.map(agent => (
-              <div key={agent.id} className="flex items-center gap-1.5">
-                <AgentDot status={agent.status} />
-                <span className="text-ws-text-muted text-sm">{agent.name}</span>
-              </div>
-            ))}
-          </div>
+        {/* Agent status — list a few, summarize when the team is large */}
+        {team.available && team.agents.length > 0 && (
+          team.agents.length > 6 ? (
+            <div className="no-drag flex items-center gap-1.5 flex-shrink-0">
+              <AgentDot status={team.agents.some(a => a.status === 'thinking') ? 'thinking' : 'ready'} />
+              <span className="text-ws-text-muted text-xs whitespace-nowrap">
+                {team.agents.length} specialists · {team.agents.some(a => a.status === 'thinking') ? 'working' : 'ready'}
+              </span>
+            </div>
+          ) : (
+            <div className="no-drag flex items-center gap-3 flex-shrink-0">
+              {team.agents.map(agent => (
+                <div key={agent.id} className="flex items-center gap-1.5">
+                  <AgentDot status={agent.status} />
+                  <span className="text-ws-text-muted text-xs whitespace-nowrap">{agent.name}</span>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         {messages.length === 0
-          ? <WelcomeScreen team={team} />
+          ? <WelcomeScreen team={team} onSend={onSend} />
           : (
             <>
               {messages.map(m => (
