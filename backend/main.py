@@ -1,11 +1,13 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from agents.ceo.agent import CEOAgent
 from teams.app_builder.agent import AppBuilderTeam
-from teams.hobby_project.agent import HobbyProjectTeam
+from teams.hobby_project.agent import HobbyProjectTeam, TEAM_DIR
 
 load_dotenv()
 
@@ -17,6 +19,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve the Project & Hobby Team's workspace files (sketches, model.html, docs)
+# through the backend so they open via the same tunnel the dashboard already uses:
+#   http://localhost:8000/workspaces/<name>/model.html
+WORKSPACES_DIR = os.path.join(TEAM_DIR, "projects")
+os.makedirs(WORKSPACES_DIR, exist_ok=True)
+app.mount("/workspaces", StaticFiles(directory=WORKSPACES_DIR, html=True), name="workspaces")
 
 # One persistent instance per team — history is kept across the session.
 TEAMS = {
