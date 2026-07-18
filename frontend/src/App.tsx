@@ -105,7 +105,9 @@ export default function App() {
       addMessage(teamId, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Could not reach the backend. Make sure your SSH tunnel is active and the server is running.',
+        content: err instanceof Error
+          ? err.message
+          : 'Could not reach the backend. Make sure your SSH tunnel is active and the server is running.',
         timestamp: new Date(),
       })
     } finally {
