@@ -69,6 +69,27 @@ Return a clean summary of the relevant memories in plain language.
 Be specific. These memories will be used by the manager to personalize their work.
 """
 
+RECONCILE_PROMPT = """
+You are the Memory AI deciding how to store a newly confirmed memory.
+
+You are given the EXISTING memories in one category and a NEW memory. Decide:
+- "replace": the new memory is about the SAME underlying preference/context as an existing
+  entry and supersedes it (e.g. the user used to prefer studying in the morning, now prefers
+  after school). Replace that specific existing entry.
+- "add": the new memory describes a DIFFERENT preference or a different context. Keep the
+  existing entries and add this as new.
+
+Rules:
+- Two memories only "relate" if they'd contradict or duplicate each other in the same context.
+  Different contexts (e.g. "short emails" vs "detailed project plans") are ADD, not replace.
+- Prefer "add" unless there is a clear same-context supersede.
+
+Return ONLY JSON:
+{"action": "replace", "replace_key": "<existing key to remove>"}
+or
+{"action": "add"}
+"""
+
 class MemoryAgent:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -124,14 +145,54 @@ class MemoryAgent:
             return
         if confirmed:
             value = modification if modification else self.pending_memory["value"]
-            store.write_memory(
+            self._reconcile_and_save(
                 category=self.pending_memory["category"],
                 key=self.pending_memory["key"],
                 value=value,
-                context=self.pending_memory.get("context", "general"),
-                confirmed=True
+                context=self.pending_memory.get("context", "general")
             )
         self.pending_memory = None
+
+    def _reconcile_and_save(self, category: str, key: str, value: str, context: str = "general"):
+        """Decide whether a new confirmed memory replaces a related existing one or is added.
+
+        Implements the architecture rule: a new memory about the same preference/context
+        replaces the old one; a memory about a different area is added.
+        """
+        existing = store.get_all().get(category, {})
+
+        # Nothing to reconcile against — or exact key already present (a direct update).
+        if not existing or key in existing:
+            store.write_memory(category, key, value, context, confirmed=True)
+            return
+
+        existing_text = "\n".join(
+            f"- {k}: {d['value']} (context: {d.get('context', 'general')})"
+            for k, d in existing.items()
+        )
+        message = (
+            f"Category: {category}\n\n"
+            f"Existing memories:\n{existing_text}\n\n"
+            f"New memory:\n- {key}: {value} (context: {context})"
+        )
+
+        try:
+            result = self.client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=128,
+                system=RECONCILE_PROMPT,
+                messages=[{"role": "user", "content": message}]
+            )
+            text = result.content[0].text.strip()
+            decision = json.loads(text[text.index("{"):text.rindex("}") + 1])
+            if decision.get("action") == "replace":
+                old_key = decision.get("replace_key")
+                if old_key and old_key in existing:
+                    store.delete_memory(category, old_key)
+        except (json.JSONDecodeError, ValueError, IndexError, KeyError):
+            pass  # fall through to a plain add — never lose the new memory
+
+        store.write_memory(category, key, value, context, confirmed=True)
 
     def get_for_manager(self, manager: str) -> str:
         memories = store.get_for_manager(manager)
@@ -149,9 +210,24 @@ class MemoryAgent:
         return result.content[0].text
 
     def save_directly(self, category: str, key: str, value: str, context: str = "general"):
-        store.write_memory(category, key, value, context, confirmed=True)
+        self._reconcile_and_save(category, key, value, context)
         return f"Memory saved: [{category}] {key} = {value}"
 
     def recall_all(self) -> str:
         memories = store.get_all()
         return store.format_for_prompt(memories)
+
+    def recall_for_user(self) -> str:
+        """A friendly summary of everything remembered, for when the user asks."""
+        memories = store.get_all()
+        if not any(memories.values()):
+            return "I haven't learned anything about your preferences yet."
+        return store.format_for_prompt(memories)
+
+    def forget(self, category: str, key: str) -> str:
+        """Let the user remove a memory they don't want kept."""
+        existing = store.get_all().get(category, {})
+        if key not in existing:
+            return f"No memory found for [{category}] {key}."
+        store.delete_memory(category, key)
+        return f"Forgotten: [{category}] {key}."

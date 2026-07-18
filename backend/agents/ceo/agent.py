@@ -212,7 +212,7 @@ TOOLS = [
     },
     {
         "name": "save_memory",
-        "description": "Save a confirmed user preference to the Memory AI. Use this when the user confirms a pattern or explicitly tells you something about how they like things done.",
+        "description": "Save a confirmed user preference to the Memory AI. Use this when the user confirms a pattern or explicitly tells you something about how they like things done. The Memory AI automatically replaces a related older preference or adds a new one.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -222,6 +222,23 @@ TOOLS = [
                 "context": {"type": "string", "description": "When this applies (e.g. 'email summaries', 'study planning', 'general')"}
             },
             "required": ["category", "key", "value"]
+        }
+    },
+    {
+        "name": "recall_memories",
+        "description": "Show the user everything the Memory AI has learned about them. Use when the user asks what you remember or know about them.",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "forget_memory",
+        "description": "Remove a stored preference at the user's request. Use when the user says to forget something. Call recall_memories first if you need the exact category and key.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string"},
+                "key": {"type": "string"}
+            },
+            "required": ["category", "key"]
         }
     },
     {
@@ -360,6 +377,13 @@ class CEOAgent:
                 key=block.input["key"],
                 value=block.input["value"],
                 context=block.input.get("context", "general")
+            )
+        elif block.name == "recall_memories":
+            return self.memory.recall_for_user()
+        elif block.name == "forget_memory":
+            return self.memory.forget(
+                category=block.input["category"],
+                key=block.input["key"]
             )
         elif block.name == "send_email":
             return self.email.send(
