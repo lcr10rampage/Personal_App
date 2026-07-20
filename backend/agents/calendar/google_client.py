@@ -1,6 +1,10 @@
+import os
 from datetime import datetime, timezone, timedelta
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+
+# Read from every connected account; writes always go to the primary (token.json).
+ACCOUNTS = [("token.json", "Personal"), ("token_school.json", "School")]
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
@@ -14,27 +18,35 @@ def get_service():
     creds = Credentials.from_authorized_user_file("token.json", SCOPES)
     return build("calendar", "v3", credentials=creds)
 
+def _read_services():
+    """(label, service) for each connected account whose token exists."""
+    out = []
+    for token_file, label in ACCOUNTS:
+        if os.path.isfile(token_file):
+            creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+            out.append((label, build("calendar", "v3", credentials=creds)))
+    return out
+
 def fetch_upcoming_events(days=7) -> str:
-    service = get_service()
     now = datetime.now(timezone.utc)
     time_max = (now + timedelta(days=days)).isoformat()
-    result = service.events().list(
-        calendarId="primary",
-        timeMin=now.isoformat(),
-        timeMax=time_max,
-        maxResults=50,
-        singleEvents=True,
-        orderBy="startTime"
-    ).execute()
-    events = result.get("items", [])
-    if not events:
+    rows = []
+    for label, service in _read_services():
+        try:
+            result = service.events().list(
+                calendarId="primary", timeMin=now.isoformat(), timeMax=time_max,
+                maxResults=50, singleEvents=True, orderBy="startTime"
+            ).execute()
+        except Exception:
+            continue  # one account failing shouldn't hide the other's events
+        for e in result.get("items", []):
+            start = e["start"].get("dateTime", e["start"].get("date"))
+            end = e["end"].get("dateTime", e["end"].get("date"))
+            rows.append((start, f"- [{label}] {e.get('summary', '(no title)')} | start: {start} | end: {end}"))
+    if not rows:
         return "No upcoming events in the next 7 days."
-    lines = []
-    for e in events:
-        start = e["start"].get("dateTime", e["start"].get("date"))
-        end = e["end"].get("dateTime", e["end"].get("date"))
-        lines.append(f"- {e['summary']} | start: {start} | end: {end}")
-    return "\n".join(lines)
+    rows.sort(key=lambda r: r[0])  # chronological across both calendars
+    return "\n".join(r[1] for r in rows)
 
 def find_event(service, name: str):
     now = datetime.now(timezone.utc).isoformat()
