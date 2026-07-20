@@ -2,12 +2,12 @@ import base64
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+# SAFETY: Gmail access is READ-ONLY. The send and compose/draft-write scopes are
+# deliberately excluded so this app is incapable of sending or altering mail at the
+# Google API level, even if application code is changed. To fully enforce this,
+# re-authorize token.json so it no longer carries gmail.send / gmail.compose.
 SCOPES = [
-    "https://www.googleapis.com/auth/calendar.readonly",
-    "https://www.googleapis.com/auth/calendar.events",
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/gmail.send"
+    "https://www.googleapis.com/auth/gmail.readonly"
 ]
 
 def get_service():
@@ -76,22 +76,12 @@ def format_emails_for_model(emails: list) -> str:
         )
     return "\n".join(lines)
 
-def create_draft(to: str, subject: str, body: str) -> str:
-    service = get_service()
-    message_text = f"To: {to}\nSubject: {subject}\n\n{body}"
-    encoded = base64.urlsafe_b64encode(message_text.encode("utf-8")).decode("utf-8")
-    draft = service.users().drafts().create(
-        userId="me",
-        body={"message": {"raw": encoded}}
-    ).execute()
-    return f"Draft saved with ID: {draft['id']}"
+# SAFETY: Sending and Gmail-draft creation are intentionally NOT implemented.
+# These stubs exist only to hard-fail if any code ever tries to call them, so a
+# send path cannot be reintroduced by accident. Drafts live as text the user
+# reviews and sends manually — nothing leaves this app.
+def send_email(*args, **kwargs):
+    raise RuntimeError("SENDING DISABLED: this app can never send email. Drafts are review-only.")
 
-def send_email(to: str, subject: str, body: str) -> str:
-    service = get_service()
-    message_text = f"To: {to}\nSubject: {subject}\n\n{body}"
-    encoded = base64.urlsafe_b64encode(message_text.encode("utf-8")).decode("utf-8")
-    service.users().messages().send(
-        userId="me",
-        body={"raw": encoded}
-    ).execute()
-    return f"Email sent to {to} — Subject: {subject}"
+def create_draft(*args, **kwargs):
+    raise RuntimeError("DISABLED: this app has read-only Gmail access and cannot write to Gmail.")
