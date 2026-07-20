@@ -33,7 +33,8 @@ def _get(path: str, params: dict = None):
         return {"_not_configured": True}
     url = f"{base}/api/v1/{path.lstrip('/')}"
     if params:
-        url += "?" + urllib.parse.urlencode(params)
+        # doseq=True so list values expand correctly (e.g. state[]=active&state[]=...)
+        url += "?" + urllib.parse.urlencode(params, doseq=True)
     req = urllib.request.Request(
         url,
         method="GET",  # hard-coded: never anything but GET
@@ -54,8 +55,16 @@ def get_courses():
 
 
 def get_upcoming():
-    # Canvas's own "what's coming up" feed.
+    # Canvas's own "what's coming up" feed (calendar events).
     return _get("users/self/upcoming_events")
+
+
+def get_planner():
+    # Planner items = upcoming assignments/quizzes/to-dos with due dates — the best
+    # "what's due" source. Only future items.
+    from datetime import datetime, timezone
+    start = datetime.now(timezone.utc).date().isoformat()
+    return _get("planner/items", {"start_date": start, "per_page": 50})
 
 
 def get_todo():
@@ -68,7 +77,7 @@ def get_course_assignments(course_id):
 
 def get_grades():
     # Enrollments include computed_current_score per course.
-    return _get("users/self/enrollments", {"state": ["active"], "per_page": 50})
+    return _get("users/self/enrollments", {"state[]": "active", "per_page": 100})
 
 
 # ---- writes are permanently disabled ----

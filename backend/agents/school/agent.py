@@ -31,22 +31,25 @@ def _fmt_courses(data):
     return "\n".join(f"- {c.get('name','(unnamed)')} [id {c.get('id')}]" for c in data if isinstance(c, dict))
 
 
-def _fmt_upcoming(data):
+def _fmt_planner(data):
     if isinstance(data, dict) and (data.get("_not_configured") or data.get("_error")):
         return None if data.get("_not_configured") else f"(Canvas error: {data['_error']})"
     if not data:
-        return "Nothing upcoming on Canvas."
+        return "Nothing due upcoming on Canvas."
     lines = []
-    for e in data:
-        if not isinstance(e, dict):
+    for it in data:
+        if not isinstance(it, dict):
             continue
-        title = e.get("title") or e.get("assignment", {}).get("name", "(event)")
-        due = e.get("start_at") or e.get("assignment", {}).get("due_at", "")
-        lines.append(f"- {title}{f' — due {due}' if due else ''}")
-    return "\n".join(lines) or "Nothing upcoming on Canvas."
+        p = it.get("plannable", {})
+        title = p.get("title") or p.get("name") or it.get("plannable_type", "item")
+        due = it.get("plannable_date") or p.get("due_at") or ""
+        ctx = it.get("context_name", "")
+        done = "✓ " if (it.get("planner_override") or {}).get("marked_complete") else ""
+        lines.append(f"- {done}{title}" + (f" — {ctx}" if ctx else "") + (f" — due {due}" if due else ""))
+    return "\n".join(lines) or "Nothing due upcoming on Canvas."
 
 
-def _fmt_grades(data):
+def _fmt_grades(data, course_names=None):
     if isinstance(data, dict) and (data.get("_not_configured") or data.get("_error")):
         return None if data.get("_not_configured") else f"(Canvas error: {data['_error']})"
     if not data:
@@ -58,7 +61,8 @@ def _fmt_grades(data):
         score = e.get("grades", {}).get("current_score")
         cid = e.get("course_id")
         if score is not None:
-            lines.append(f"- Course {cid}: {score}%")
+            name = (course_names or {}).get(cid, f"Course {cid}")
+            lines.append(f"- {name}: {score}%")
     return "\n".join(lines) or "No current scores posted."
 
 
@@ -66,15 +70,21 @@ class SchoolAgent:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
+    def _course_names(self):
+        raw = canvas.get_courses()
+        if not isinstance(raw, list):
+            return {}
+        return {c.get("id"): c.get("name", f"Course {c.get('id')}") for c in raw if isinstance(c, dict)}
+
     def _snapshot(self) -> str:
         if not canvas.is_configured():
             return ("_not_connected_")
         courses = _fmt_courses(canvas.get_courses())
-        upcoming = _fmt_upcoming(canvas.get_upcoming())
-        grades = _fmt_grades(canvas.get_grades())
+        assignments = _fmt_planner(canvas.get_planner())
+        grades = _fmt_grades(canvas.get_grades(), self._course_names())
         return (
             f"COURSES:\n{courses or '—'}\n\n"
-            f"UPCOMING:\n{upcoming or '—'}\n\n"
+            f"UPCOMING ASSIGNMENTS (due soon):\n{assignments or '—'}\n\n"
             f"GRADES:\n{grades or '—'}"
         )
 
@@ -98,7 +108,7 @@ class SchoolAgent:
     def assignments(self) -> str:
         if not canvas.is_configured():
             return "Canvas isn't connected yet (set CANVAS_BASE_URL and CANVAS_ACCESS_TOKEN)."
-        return _fmt_upcoming(canvas.get_upcoming()) or "Nothing upcoming."
+        return _fmt_planner(canvas.get_planner()) or "Nothing upcoming."
 
     def courses(self) -> str:
         if not canvas.is_configured():
@@ -108,4 +118,4 @@ class SchoolAgent:
     def grades(self) -> str:
         if not canvas.is_configured():
             return "Canvas isn't connected yet (set CANVAS_BASE_URL and CANVAS_ACCESS_TOKEN)."
-        return _fmt_grades(canvas.get_grades()) or "No grades found."
+        return _fmt_grades(canvas.get_grades(), self._course_names()) or "No grades found."
