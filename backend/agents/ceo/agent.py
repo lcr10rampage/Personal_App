@@ -259,12 +259,11 @@ TOOLS = [
 class CEOAgent:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        self.history = []
         self.calendar = CalendarAgent()
         self.email = EmailAgent()
         self.memory = MemoryAgent()
 
-    def chat(self, user_message: str) -> str:
+    def chat(self, user_message: str, history=None) -> str:
         # Handle memory confirmation if one is pending
         if self.memory.pending_memory:
             lower = user_message.lower().strip()
@@ -278,7 +277,10 @@ class CEOAgent:
                 self.memory.confirm_pending(confirmed=True, modification=f"{self.memory.pending_memory['value']} (situational: {user_message})")
                 return "Got it — I'll remember that as situational."
 
-        self.history.append({"role": "user", "content": user_message})
+        # Prior turns come from the persisted conversation (text-only); the tool loop
+        # runs on a local copy so tool blocks aren't persisted.
+        messages = [dict(m) for m in (history or [])]
+        messages.append({"role": "user", "content": user_message})
 
         while True:
             response = self.client.messages.create(
@@ -286,7 +288,7 @@ class CEOAgent:
                 max_tokens=2048,
                 system=SYSTEM_PROMPT,
                 tools=TOOLS,
-                messages=self.history
+                messages=messages
             )
 
             if response.stop_reason == "end_turn":
@@ -297,8 +299,6 @@ class CEOAgent:
                     response=raw_reply,
                     context=user_message
                 )
-
-                self.history.append({"role": "assistant", "content": personalized})
 
                 # Memory AI observes the exchange and may generate a learning question
                 learning_question = self.memory.observe(user_message, personalized)
@@ -317,8 +317,8 @@ class CEOAgent:
                             "tool_use_id": block.id,
                             "content": result
                         })
-                self.history.append({"role": "assistant", "content": response.content})
-                self.history.append({"role": "user", "content": tool_results})
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": tool_results})
 
     def _handle_tool(self, block) -> str:
         if block.name == "search_calendar_events":

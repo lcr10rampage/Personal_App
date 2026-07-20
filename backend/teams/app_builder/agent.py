@@ -72,10 +72,11 @@ def _safe_path(rel_path: str) -> str:
 class AppBuilderTeam:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        self.history = []
 
-    def chat(self, user_message: str) -> str:
-        self.history.append({"role": "user", "content": user_message})
+    def chat(self, user_message: str, history=None) -> str:
+        # Prior turns come from the persisted conversation (text-only).
+        messages = [dict(m) for m in (history or [])]
+        messages.append({"role": "user", "content": user_message})
 
         while True:
             response = self.client.messages.create(
@@ -83,13 +84,11 @@ class AppBuilderTeam:
                 max_tokens=2048,
                 system=SYSTEM_PROMPT,
                 tools=TOOLS,
-                messages=self.history,
+                messages=messages,
             )
 
             if response.stop_reason == "end_turn":
-                reply = response.content[0].text
-                self.history.append({"role": "assistant", "content": reply})
-                return reply
+                return response.content[0].text
 
             if response.stop_reason == "tool_use":
                 tool_results = []
@@ -101,8 +100,8 @@ class AppBuilderTeam:
                             "tool_use_id": block.id,
                             "content": result,
                         })
-                self.history.append({"role": "assistant", "content": response.content})
-                self.history.append({"role": "user", "content": tool_results})
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": tool_results})
 
     def _handle_tool(self, block) -> str:
         if block.name == "list_guide_files":

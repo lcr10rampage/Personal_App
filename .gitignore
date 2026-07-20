@@ -6,4 +6,5 @@ credentials.json
 token.json
 *.bin
 *.log
+backend/data/
 backend/agents/memory/memories.json

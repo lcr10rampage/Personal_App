@@ -48,7 +48,11 @@ Project-hobby-team repository. Use your tools:
 - `list_workspaces()` / `read_workspace_file(workspace, filename)` — reopen prior work.
 
 Rules of engagement:
-- ALWAYS ask "Is this a hobby or a project?" first on any new workspace, and wait for the answer.
+- Ask "Is this a hobby or a project?" ONLY when the user proposes a NEW thing to plan and the
+  current conversation has not already established the mode. Once this conversation has classified
+  the current thing (the user answered, or it's clearly implied), DO NOT ask again — treat every
+  follow-up question as being about that same workspace and just answer it. Only ask again if the
+  user clearly starts planning a different, unrelated new thing.
 - Do not role-play the specialists yourself — call `consult_specialist` so each is a real Sonnet
   agent. Integrate and sanity-check their outputs; surface conflicts rather than silently choosing.
 - Tell the user which stage you're in and what the single next action is.
@@ -151,7 +155,6 @@ def _safe_path(base: str, rel_path: str) -> str:
 class HobbyProjectTeam:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        self.history = []
         self._cache = {}
         self.system_prompt = self._build_system_prompt()
 
@@ -268,15 +271,18 @@ class HobbyProjectTeam:
         return "Unknown tool."
 
     # --- main loop ---
-    def chat(self, user_message: str) -> str:
-        self.history.append({"role": "user", "content": user_message})
+    def chat(self, user_message: str, history=None) -> str:
+        # Prior turns come from the persisted conversation (text-only), so the
+        # Coordinator remembers the classification and won't re-ask hobby/project.
+        messages = [dict(m) for m in (history or [])]
+        messages.append({"role": "user", "content": user_message})
         while True:
             response = self.client.messages.create(
                 model=MODEL,
                 max_tokens=4096,
                 system=self.system_prompt,
                 tools=TOOLS,
-                messages=self.history,
+                messages=messages,
             )
             if response.stop_reason == "tool_use":
                 tool_results = []
@@ -287,10 +293,9 @@ class HobbyProjectTeam:
                             "tool_use_id": block.id,
                             "content": self._handle_tool(block),
                         })
-                self.history.append({"role": "assistant", "content": response.content})
-                self.history.append({"role": "user", "content": tool_results})
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": tool_results})
                 continue
 
             reply = next((b.text for b in response.content if getattr(b, "type", None) == "text"), "")
-            self.history.append({"role": "assistant", "content": reply})
             return reply

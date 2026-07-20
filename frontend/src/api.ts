@@ -1,9 +1,21 @@
+import { Conversation, Message } from './types'
+
 const API_URL = 'http://localhost:8000'
 // Teams like Project & Hobby chain several model calls, so allow a generous window
 // before giving up — but never wait forever.
 const TIMEOUT_MS = 180_000
 
-export async function sendMessage(message: string, team: string = 'life_manager'): Promise<string> {
+export interface ChatResult {
+  response: string
+  conversationId: string
+  title: string
+}
+
+export async function sendMessage(
+  message: string,
+  team: string = 'life_manager',
+  conversationId?: string,
+): Promise<ChatResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
@@ -11,7 +23,7 @@ export async function sendMessage(message: string, team: string = 'life_manager'
     const res = await fetch(`${API_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, team }),
+      body: JSON.stringify({ message, team, conversation_id: conversationId }),
       signal: controller.signal,
     })
 
@@ -20,7 +32,7 @@ export async function sendMessage(message: string, team: string = 'life_manager'
     }
 
     const data = await res.json()
-    return data.response
+    return { response: data.response, conversationId: data.conversation_id, title: data.title }
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new Error(
@@ -46,4 +58,36 @@ export async function checkHealth(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+export async function listConversations(team: string): Promise<Conversation[]> {
+  const res = await fetch(`${API_URL}/conversations?team=${encodeURIComponent(team)}`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.conversations ?? []
+}
+
+export async function createConversation(team: string): Promise<Conversation> {
+  const res = await fetch(`${API_URL}/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ team }),
+  })
+  return res.json()
+}
+
+export async function getConversationMessages(id: string): Promise<Message[]> {
+  const res = await fetch(`${API_URL}/conversations/${id}`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.messages ?? []).map((m: any, i: number) => ({
+    id: `${id}-${i}`,
+    role: m.role,
+    content: m.content,
+    timestamp: m.ts ? new Date(m.ts * 1000) : new Date(),
+  }))
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  await fetch(`${API_URL}/conversations/${id}`, { method: 'DELETE' })
 }

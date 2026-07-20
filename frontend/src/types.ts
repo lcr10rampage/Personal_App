@@ -19,3 +19,10 @@ export interface Message {
   content: string
   timestamp: Date
 }
+
+export interface Conversation {
+  id: string
+  title: string
+  updated: number
+  message_count?: number
+}

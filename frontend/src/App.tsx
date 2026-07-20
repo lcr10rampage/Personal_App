@@ -1,9 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
+import ConversationList from './components/ConversationList'
 import ChatWindow from './components/ChatWindow'
 import TitleBar from './components/TitleBar'
-import { sendMessage } from './api'
-import { Team, Message } from './types'
+import {
+  sendMessage, listConversations, createConversation,
+  getConversationMessages, deleteConversation,
+} from './api'
+import { Team, Message, Conversation } from './types'
 
 const TEAMS: Team[] = [
   {
@@ -68,41 +72,75 @@ const TEAMS: Team[] = [
 
 export default function App() {
   const [activeTeamId, setActiveTeamId] = useState('life_manager')
-  const [messagesByTeam, setMessagesByTeam] = useState<Record<string, Message[]>>({})
+  const [convByTeam, setConvByTeam] = useState<Record<string, Conversation[]>>({})
+  const [activeConvByTeam, setActiveConvByTeam] = useState<Record<string, string | null>>({})
+  const [messagesByConv, setMessagesByConv] = useState<Record<string, Message[]>>({})
   const [isThinking, setIsThinking] = useState(false)
 
   const activeTeam = TEAMS.find(t => t.id === activeTeamId)!
-  const messages = messagesByTeam[activeTeamId] || []
+  const conversations = convByTeam[activeTeamId] || []
+  const activeConvId = activeConvByTeam[activeTeamId] ?? null
+  const messages = activeConvId ? (messagesByConv[activeConvId] || []) : []
 
-  const addMessage = (teamId: string, message: Message) => {
-    setMessagesByTeam(prev => ({
-      ...prev,
-      [teamId]: [...(prev[teamId] || []), message],
-    }))
+  // Load a team's conversation list when it becomes active.
+  useEffect(() => {
+    if (!activeTeam.available) return
+    let cancelled = false
+    ;(async () => {
+      const convs = await listConversations(activeTeamId)
+      if (cancelled) return
+      setConvByTeam(prev => ({ ...prev, [activeTeamId]: convs }))
+      setActiveConvByTeam(prev =>
+        prev[activeTeamId] !== undefined ? prev : { ...prev, [activeTeamId]: convs[0]?.id ?? null }
+      )
+    })()
+    return () => { cancelled = true }
+  }, [activeTeamId])
+
+  // Load messages for the active conversation the first time it's opened.
+  useEffect(() => {
+    const cid = activeConvByTeam[activeTeamId]
+    if (!cid || messagesByConv[cid]) return
+    let cancelled = false
+    ;(async () => {
+      const msgs = await getConversationMessages(cid)
+      if (!cancelled) setMessagesByConv(prev => ({ ...prev, [cid]: msgs }))
+    })()
+    return () => { cancelled = true }
+  }, [activeTeamId, activeConvByTeam])
+
+  const addMessage = (convId: string, message: Message) => {
+    setMessagesByConv(prev => ({ ...prev, [convId]: [...(prev[convId] || []), message] }))
   }
 
   const handleSend = async (text: string) => {
     const teamId = activeTeamId
+    let convId = activeConvByTeam[teamId] ?? null
 
-    addMessage(teamId, {
-      id: Date.now().toString(),
-      role: 'user',
-      content: text,
-      timestamp: new Date(),
+    // Start a conversation on the first message if none is active.
+    if (!convId) {
+      const c = await createConversation(teamId)
+      convId = c.id
+      setConvByTeam(prev => ({ ...prev, [teamId]: [c, ...(prev[teamId] || [])] }))
+      setActiveConvByTeam(prev => ({ ...prev, [teamId]: c.id }))
+      setMessagesByConv(prev => ({ ...prev, [c.id]: [] }))
+    }
+
+    addMessage(convId, {
+      id: Date.now().toString(), role: 'user', content: text, timestamp: new Date(),
     })
-
     setIsThinking(true)
 
     try {
-      const response = await sendMessage(text, teamId)
-      addMessage(teamId, {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
+      const result = await sendMessage(text, teamId, convId)
+      addMessage(result.conversationId, {
+        id: (Date.now() + 1).toString(), role: 'assistant', content: result.response, timestamp: new Date(),
       })
+      // Refresh the list so titles/order stay current.
+      const convs = await listConversations(teamId)
+      setConvByTeam(prev => ({ ...prev, [teamId]: convs }))
     } catch (err) {
-      addMessage(teamId, {
+      addMessage(convId, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: err instanceof Error
@@ -120,6 +158,26 @@ export default function App() {
     if (team?.available) setActiveTeamId(teamId)
   }
 
+  const handleNewConversation = async () => {
+    const c = await createConversation(activeTeamId)
+    setConvByTeam(prev => ({ ...prev, [activeTeamId]: [c, ...(prev[activeTeamId] || [])] }))
+    setActiveConvByTeam(prev => ({ ...prev, [activeTeamId]: c.id }))
+    setMessagesByConv(prev => ({ ...prev, [c.id]: [] }))
+  }
+
+  const handleSelectConversation = (id: string) => {
+    setActiveConvByTeam(prev => ({ ...prev, [activeTeamId]: id }))
+  }
+
+  const handleDeleteConversation = async (id: string) => {
+    await deleteConversation(id)
+    const remaining = (convByTeam[activeTeamId] || []).filter(c => c.id !== id)
+    setConvByTeam(prev => ({ ...prev, [activeTeamId]: remaining }))
+    setActiveConvByTeam(prev =>
+      prev[activeTeamId] === id ? { ...prev, [activeTeamId]: remaining[0]?.id ?? null } : prev
+    )
+  }
+
   const activeAgents = isThinking
     ? activeTeam.agents.map((a, i) => ({ ...a, status: i === 0 ? 'thinking' as const : a.status }))
     : activeTeam.agents
@@ -132,6 +190,14 @@ export default function App() {
           teams={TEAMS}
           activeTeamId={activeTeamId}
           onSelectTeam={handleSelectTeam}
+        />
+        <ConversationList
+          teamName={activeTeam.name}
+          conversations={conversations}
+          activeId={activeConvId}
+          onSelect={handleSelectConversation}
+          onNew={handleNewConversation}
+          onDelete={handleDeleteConversation}
         />
         <ChatWindow
           team={{ ...activeTeam, agents: activeAgents }}
