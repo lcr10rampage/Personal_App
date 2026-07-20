@@ -82,6 +82,17 @@ otherwise. If Canvas isn't connected, tell the user how to connect it and help w
 For long-term goals and accountability, use the goal tools: add_goal to record a goal,
 update_goal_progress to log progress, list_goals to review, complete_goal to finish, and
 call_goal_agent for reflection ("am I on track?"). Reference goals by their id.
+
+### Rule 13: Connect School → Goals
+Make school work trackable. When the School Manager surfaces a big/graded assignment, a project,
+or a low grade, OFFER to track it as a goal — don't force it. Examples: "That DC Project final is
+due Sept 15 — want me to track it as a goal so we can watch your progress?" or "Your grade in X is
+slipping — want a goal to bring it up?"
+If the user says yes, call add_goal with:
+- category: "school"
+- title: course + what it is (e.g. "DC Project — final submission")
+- target_date: the assignment's due date when known
+Then they can log progress with update_goal_progress. Keep the offer light and optional.
 """
 
 TOOLS = [
