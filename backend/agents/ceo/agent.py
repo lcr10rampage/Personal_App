@@ -7,6 +7,7 @@ from agents.school.agent import SchoolAgent
 from agents.notifications.agent import NotificationAgent
 from agents.knowledge.agent import KnowledgeAgent
 from agents.research.agent import ResearchAgent
+import project_inbox
 from agents.memory.agent import MemoryAgent
 
 SYSTEM_PROMPT = """
@@ -119,6 +120,14 @@ X", "what should I know before I start Y", "help me decide between A and B"), ca
 for a pre-flight briefing. After presenting it, offer to save the key takeaways to their Knowledge
 base with remember_info. Note the Research Manager has no live internet, so it will flag anything
 time-sensitive (prices, latest versions) as "verify current" — pass that along honestly.
+
+### Rule 17: Hand physical projects & hobbies to the Project & Hobby team
+When you research something or create a goal that is about BUILDING/MAKING something physical or a
+HOBBY (a camper build, a shed, a workbench, getting into fishing, a garden, a restoration, etc.),
+after handling it here, ALSO call send_to_project_team with the title, useful research takeaways in
+detail, and any target date. Tell the user it's been handed off and they can open the Project &
+Hobby team to plan it in detail. Do NOT hand off non-physical goals (grades, habits, chores, emails).
+When in doubt, ask the user if they'd like it planned by the Project & Hobby team.
 """
 
 TOOLS = [
@@ -370,6 +379,15 @@ TOOLS = [
             "topic": {"type": "string", "description": "The project, topic, or decision"},
             "context": {"type": "string", "description": "Optional: the user's situation, budget, experience, constraints"}
         }, "required": ["topic"]}
+    },
+    {
+        "name": "send_to_project_team",
+        "description": "Hand a physical build project or hobby off to the Project & Hobby planning team. Use when a goal or research topic is about building/making something or a hobby (e.g. a camper build, a shed, getting into fishing) — the Project & Hobby team will pick it up and offer to plan it in detail. Include any research takeaways in detail.",
+        "input_schema": {"type": "object", "properties": {
+            "title": {"type": "string", "description": "The project or hobby, e.g. 'Build a 6x10 camper trailer'"},
+            "detail": {"type": "string", "description": "Context and any research takeaways to pass along"},
+            "target_date": {"type": "string", "description": "Optional target/completion date"}
+        }, "required": ["title"]}
     }
     # SAFETY: There is intentionally NO send_email tool. This system can never send email.
 ]
@@ -540,6 +558,15 @@ class CEOAgent:
             return self.knowledge.list()
         elif block.name == "research_topic":
             return self.research.brief(block.input["topic"], block.input.get("context", ""))
+        elif block.name == "send_to_project_team":
+            seed = project_inbox.add_seed(
+                title=block.input["title"],
+                detail=block.input.get("detail", ""),
+                source="Life Manager",
+                target_date=block.input.get("target_date", ""),
+            )
+            return (f"Handed off to the Project & Hobby team [{seed['id']}]: {seed['title']}. "
+                    "Open that team to plan it in detail.")
         elif block.name == "send_email":
             # SAFETY: hard refusal. This branch should be unreachable (no such tool exists).
             return ("REFUSED: Sending email is permanently disabled. I can only draft emails for "

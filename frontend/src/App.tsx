@@ -120,32 +120,43 @@ export default function App() {
 
   const handleSend = async (text: string) => {
     const teamId = activeTeamId
-    let convId = activeConvByTeam[teamId] ?? null
+    const existingConvId = activeConvByTeam[teamId] ?? null
+    // Hold messages under the active conversation, or a temporary id until the
+    // backend returns the real one. The user's message shows immediately, before
+    // any network call, so the button always gives feedback.
+    const bucket = existingConvId ?? `tmp-${Date.now()}`
 
-    // Start a conversation on the first message if none is active.
-    if (!convId) {
-      const c = await createConversation(teamId)
-      convId = c.id
-      setConvByTeam(prev => ({ ...prev, [teamId]: [c, ...(prev[teamId] || [])] }))
-      setActiveConvByTeam(prev => ({ ...prev, [teamId]: c.id }))
-      setMessagesByConv(prev => ({ ...prev, [c.id]: [] }))
-    }
-
-    addMessage(convId, {
+    addMessage(bucket, {
       id: Date.now().toString(), role: 'user', content: text, timestamp: new Date(),
     })
+    if (!existingConvId) setActiveConvByTeam(prev => ({ ...prev, [teamId]: bucket }))
     setIsThinking(true)
 
     try {
-      const result = await sendMessage(text, teamId, convId)
-      addMessage(result.conversationId, {
+      // Pass undefined when there's no conversation yet — the backend creates one
+      // and returns its id, so we never depend on a separate create call succeeding.
+      const result = await sendMessage(text, teamId, existingConvId ?? undefined)
+      const realId = result.conversationId || bucket
+
+      // If the backend assigned a real id, migrate the temp bucket's messages onto it.
+      if (realId !== bucket) {
+        setMessagesByConv(prev => {
+          const moved = prev[bucket] || []
+          const next = { ...prev, [realId]: [...(prev[realId] || []), ...moved] }
+          delete next[bucket]
+          return next
+        })
+        setActiveConvByTeam(prev => ({ ...prev, [teamId]: realId }))
+      }
+
+      addMessage(realId, {
         id: (Date.now() + 1).toString(), role: 'assistant', content: result.response, timestamp: new Date(),
       })
       // Refresh the list so titles/order stay current.
       const convs = await listConversations(teamId)
       setConvByTeam(prev => ({ ...prev, [teamId]: convs }))
     } catch (err) {
-      addMessage(convId, {
+      addMessage(activeConvByTeam[teamId] ?? bucket, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: err instanceof Error
@@ -164,10 +175,15 @@ export default function App() {
   }
 
   const handleNewConversation = async () => {
-    const c = await createConversation(activeTeamId)
-    setConvByTeam(prev => ({ ...prev, [activeTeamId]: [c, ...(prev[activeTeamId] || [])] }))
-    setActiveConvByTeam(prev => ({ ...prev, [activeTeamId]: c.id }))
-    setMessagesByConv(prev => ({ ...prev, [c.id]: [] }))
+    try {
+      const c = await createConversation(activeTeamId)
+      if (!c?.id) return
+      setConvByTeam(prev => ({ ...prev, [activeTeamId]: [c, ...(prev[activeTeamId] || [])] }))
+      setActiveConvByTeam(prev => ({ ...prev, [activeTeamId]: c.id }))
+      setMessagesByConv(prev => ({ ...prev, [c.id]: [] }))
+    } catch {
+      // Backend unreachable — leave state as-is; sending a message will still start a chat.
+    }
   }
 
   const handleSelectConversation = (id: string) => {

@@ -1,6 +1,7 @@
 import os
 import re
 import anthropic
+import project_inbox
 
 # Where the Project & Hobby Team knowledge base lives (the Project-hobby-team repo).
 # Override with HOBBY_TEAM_DIR if it lives elsewhere.
@@ -48,6 +49,10 @@ Project-hobby-team repository. Use your tools:
 - `list_workspaces()` / `read_workspace_file(workspace, filename)` — reopen prior work.
 
 Rules of engagement:
+- At the START of a new conversation, call `list_incoming` — the user's Life Manager may have handed
+  off a project or hobby idea (from research or a goal). If there are incoming ideas, mention them
+  and offer to plan one: "Your Life Manager sent over '<title>' — want to start a workspace for it?"
+  When you turn one into a workspace, call `claim_incoming` with its id to clear it from the inbox.
 - Ask "Is this a hobby or a project?" ONLY when the user proposes a NEW thing to plan and the
   current conversation has not already established the mode. Once this conversation has classified
   the current thing (the user answered, or it's clearly implied), DO NOT ask again — treat every
@@ -137,6 +142,16 @@ TOOLS = [
             },
             "required": ["workspace", "filename"],
         },
+    },
+    {
+        "name": "list_incoming",
+        "description": "List project/hobby ideas handed off from the user's Life Manager (via research or goals). Check this at the start of a conversation.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "claim_incoming",
+        "description": "Remove an incoming idea from the hand-off inbox once you've turned it into a workspace (pass its id).",
+        "input_schema": {"type": "object", "properties": {"seed_id": {"type": "string"}}, "required": ["seed_id"]},
     },
 ]
 
@@ -268,6 +283,11 @@ class HobbyProjectTeam:
             return self._list_workspaces()
         if n == "read_workspace_file":
             return self._read_workspace_file(i["workspace"], i["filename"])
+        if n == "list_incoming":
+            return project_inbox.format_seeds()
+        if n == "claim_incoming":
+            ok = project_inbox.remove_seed(i["seed_id"])
+            return "Cleared from the inbox." if ok else f"No incoming idea with id {i['seed_id']}."
         return "Unknown tool."
 
     # --- main loop ---

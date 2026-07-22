@@ -73,6 +73,7 @@ export async function createConversation(team: string): Promise<Conversation> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ team }),
   })
+  if (!res.ok) throw new Error(`Could not create conversation (${res.status}).`)
   return res.json()
 }
 
