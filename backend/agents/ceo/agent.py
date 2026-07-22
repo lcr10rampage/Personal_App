@@ -5,6 +5,7 @@ from agents.email.agent import EmailAgent
 from agents.goals.agent import GoalAgent
 from agents.school.agent import SchoolAgent
 from agents.notifications.agent import NotificationAgent
+from agents.knowledge.agent import KnowledgeAgent
 from agents.memory.agent import MemoryAgent
 
 SYSTEM_PROMPT = """
@@ -101,6 +102,15 @@ When the user asks what to focus on, what they missed, to be caught up, or what'
 Notification Manager scans email, school, calendar, and goals and returns a prioritized, noise-cut
 briefing. Prefer it over calling every manager separately for these "triage" questions. Present its
 briefing as-is; don't bury the top item.
+
+### Rule 15: Knowledge Manager vs Memory — don't confuse them
+- **Knowledge Manager** = actual INFORMATION the user wants to find later: facts, notes, links,
+  passwords/combos, "where I put things." Save with remember_info; retrieve with find_info
+  ("where is X?", "what's my Y?", "what do I know about Z?").
+- **Memory (save_memory)** = the user's PREFERENCES and style (how they like emails, when they study).
+Route each request to the right one. "Remember my locker combo is 12-4-30" → remember_info.
+"I like short summaries" → save_memory. When unsure, if it's a fact/where-something-is, use
+Knowledge; if it's about how they like things done, use Memory.
 """
 
 TOOLS = [
@@ -324,6 +334,26 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {
             "query": {"type": "string", "description": "Optional focus, e.g. 'just school' or 'today only'"}
         }}
+    },
+    {
+        "name": "remember_info",
+        "description": "Save a fact, note, link, or where-something-is to the user's Knowledge base. Use for actual INFORMATION the user wants to find later (e.g. 'my locker combo is 12-4-30', 'the wifi password is X', a useful link, 'I left my cleats in the garage'). NOT for preferences/style — that's save_memory.",
+        "input_schema": {"type": "object", "properties": {
+            "content": {"type": "string", "description": "The information to remember"},
+            "title": {"type": "string", "description": "Short label (optional)"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags for retrieval"},
+            "source": {"type": "string", "description": "Where it came from (optional)"}
+        }, "required": ["content"]}
+    },
+    {
+        "name": "find_info",
+        "description": "Find something in the user's Knowledge base. Use for 'where is X?', 'what's my Y?', 'what do I know about Z?', 'where did I put ...'.",
+        "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+    },
+    {
+        "name": "list_knowledge",
+        "description": "List everything saved in the user's Knowledge base.",
+        "input_schema": {"type": "object", "properties": {}}
     }
     # SAFETY: There is intentionally NO send_email tool. This system can never send email.
 ]
@@ -337,6 +367,7 @@ class CEOAgent:
         self.goals = GoalAgent()
         self.school = SchoolAgent()
         self.notifications = NotificationAgent()
+        self.knowledge = KnowledgeAgent()
 
     def chat(self, user_message: str, history=None) -> str:
         # Handle memory confirmation if one is pending
@@ -481,6 +512,15 @@ class CEOAgent:
             return self.school.assignments()
         elif block.name == "whats_important":
             return self.notifications.brief(block.input.get("query", ""))
+        elif block.name == "remember_info":
+            return self.knowledge.remember(
+                block.input["content"], block.input.get("title", ""),
+                block.input.get("tags"), block.input.get("source", "")
+            )
+        elif block.name == "find_info":
+            return self.knowledge.find(block.input["query"])
+        elif block.name == "list_knowledge":
+            return self.knowledge.list()
         elif block.name == "send_email":
             # SAFETY: hard refusal. This branch should be unreachable (no such tool exists).
             return ("REFUSED: Sending email is permanently disabled. I can only draft emails for "

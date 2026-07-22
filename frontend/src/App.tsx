@@ -23,6 +23,7 @@ const TEAMS: Team[] = [
       { id: 'school',        name: 'School Manager', status: 'ready' },
       { id: 'goals',         name: 'Goal Manager', status: 'ready' },
       { id: 'notifications', name: 'Notifications', status: 'ready' },
+      { id: 'knowledge',     name: 'Knowledge Manager', status: 'ready' },
       { id: 'memory',        name: 'Memory AI', status: 'ready' },
     ],
   },
