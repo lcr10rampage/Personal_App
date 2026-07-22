@@ -4,6 +4,7 @@ from agents.calendar.agent import CalendarAgent
 from agents.email.agent import EmailAgent
 from agents.goals.agent import GoalAgent
 from agents.school.agent import SchoolAgent
+from agents.notifications.agent import NotificationAgent
 from agents.memory.agent import MemoryAgent
 
 SYSTEM_PROMPT = """
@@ -93,6 +94,13 @@ If the user says yes, call add_goal with:
 - title: course + what it is (e.g. "DC Project — final submission")
 - target_date: the assignment's due date when known
 Then they can log progress with update_goal_progress. Keep the offer light and optional.
+
+### Rule 14: Notification Manager — "what matters right now"
+When the user asks what to focus on, what they missed, to be caught up, or what's important
+(e.g. "what should I do today?", "catch me up", "anything important?"), call whats_important. The
+Notification Manager scans email, school, calendar, and goals and returns a prioritized, noise-cut
+briefing. Prefer it over calling every manager separately for these "triage" questions. Present its
+briefing as-is; don't bury the top item.
 """
 
 TOOLS = [
@@ -309,6 +317,13 @@ TOOLS = [
         "name": "get_school_assignments",
         "description": "Get the user's upcoming Canvas assignments/events (read-only).",
         "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "whats_important",
+        "description": "Ask the Notification Manager what matters right now. It scans across email, school (assignments + grades), calendar, and goals and returns a prioritized, noise-reduced briefing. Use for 'what should I focus on?', 'what did I miss?', 'catch me up', 'what's important?'.",
+        "input_schema": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "Optional focus, e.g. 'just school' or 'today only'"}
+        }}
     }
     # SAFETY: There is intentionally NO send_email tool. This system can never send email.
 ]
@@ -321,6 +336,7 @@ class CEOAgent:
         self.memory = MemoryAgent()
         self.goals = GoalAgent()
         self.school = SchoolAgent()
+        self.notifications = NotificationAgent()
 
     def chat(self, user_message: str, history=None) -> str:
         # Handle memory confirmation if one is pending
@@ -463,6 +479,8 @@ class CEOAgent:
             return self.school.ask(block.input["query"])
         elif block.name == "get_school_assignments":
             return self.school.assignments()
+        elif block.name == "whats_important":
+            return self.notifications.brief(block.input.get("query", ""))
         elif block.name == "send_email":
             # SAFETY: hard refusal. This branch should be unreachable (no such tool exists).
             return ("REFUSED: Sending email is permanently disabled. I can only draft emails for "

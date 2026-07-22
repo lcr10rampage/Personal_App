@@ -17,10 +17,13 @@ const TEAMS: Team[] = [
     icon: '◆',
     available: true,
     agents: [
-      { id: 'orchestrator', name: 'Orchestrator', status: 'ready' },
-      { id: 'calendar',     name: 'Time Manager', status: 'ready' },
-      { id: 'email',        name: 'Comms Manager', status: 'ready' },
-      { id: 'memory',       name: 'Memory AI', status: 'ready' },
+      { id: 'orchestrator',  name: 'Orchestrator', status: 'ready' },
+      { id: 'calendar',      name: 'Time Manager', status: 'ready' },
+      { id: 'email',         name: 'Comms Manager', status: 'ready' },
+      { id: 'school',        name: 'School Manager', status: 'ready' },
+      { id: 'goals',         name: 'Goal Manager', status: 'ready' },
+      { id: 'notifications', name: 'Notifications', status: 'ready' },
+      { id: 'memory',        name: 'Memory AI', status: 'ready' },
     ],
   },
   {
