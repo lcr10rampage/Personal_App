@@ -6,6 +6,7 @@ from agents.goals.agent import GoalAgent
 from agents.school.agent import SchoolAgent
 from agents.notifications.agent import NotificationAgent
 from agents.knowledge.agent import KnowledgeAgent
+from agents.research.agent import ResearchAgent
 from agents.memory.agent import MemoryAgent
 
 SYSTEM_PROMPT = """
@@ -111,6 +112,13 @@ briefing as-is; don't bury the top item.
 Route each request to the right one. "Remember my locker combo is 12-4-30" → remember_info.
 "I like short summaries" → save_memory. When unsure, if it's a fact/where-something-is, use
 Knowledge; if it's about how they like things done, use Memory.
+
+### Rule 16: Research Manager
+When the user wants to start something new, learn a topic, or make a decision ("help me research
+X", "what should I know before I start Y", "help me decide between A and B"), call research_topic
+for a pre-flight briefing. After presenting it, offer to save the key takeaways to their Knowledge
+base with remember_info. Note the Research Manager has no live internet, so it will flag anything
+time-sensitive (prices, latest versions) as "verify current" — pass that along honestly.
 """
 
 TOOLS = [
@@ -354,6 +362,14 @@ TOOLS = [
         "name": "list_knowledge",
         "description": "List everything saved in the user's Knowledge base.",
         "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "research_topic",
+        "description": "Ask the Research Manager for a 'what to know before you begin' briefing on a project, topic to learn, or a decision. Use for 'help me research X', 'what should I know before starting Y', 'help me decide between A and B'.",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "The project, topic, or decision"},
+            "context": {"type": "string", "description": "Optional: the user's situation, budget, experience, constraints"}
+        }, "required": ["topic"]}
     }
     # SAFETY: There is intentionally NO send_email tool. This system can never send email.
 ]
@@ -368,6 +384,7 @@ class CEOAgent:
         self.school = SchoolAgent()
         self.notifications = NotificationAgent()
         self.knowledge = KnowledgeAgent()
+        self.research = ResearchAgent()
 
     def chat(self, user_message: str, history=None) -> str:
         # Handle memory confirmation if one is pending
@@ -521,6 +538,8 @@ class CEOAgent:
             return self.knowledge.find(block.input["query"])
         elif block.name == "list_knowledge":
             return self.knowledge.list()
+        elif block.name == "research_topic":
+            return self.research.brief(block.input["topic"], block.input.get("context", ""))
         elif block.name == "send_email":
             # SAFETY: hard refusal. This branch should be unreachable (no such tool exists).
             return ("REFUSED: Sending email is permanently disabled. I can only draft emails for "
