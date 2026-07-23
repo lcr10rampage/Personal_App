@@ -113,6 +113,12 @@ Answer the user's literal request first. Flag urgent items after.
 Do not flag low-priority emails as urgent.
 """
 
+# Inbox analysis is internal structured extraction → cheap Haiku is plenty.
+# Drafting writes in the user's voice and goes (via the CEO) to the user → keep Sonnet.
+ANALYSIS_MODEL = "claude-haiku-4-5-20251001"
+DRAFT_MODEL = "claude-sonnet-4-6"
+
+
 class EmailAgent:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -128,7 +134,7 @@ class EmailAgent:
         self.history.append({"role": "user", "content": message})
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=ANALYSIS_MODEL,
             max_tokens=1024,
             system=ANALYSIS_PROMPT,
             messages=self.history
@@ -150,7 +156,7 @@ class EmailAgent:
         )
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=DRAFT_MODEL,
             max_tokens=1024,
             system=DRAFT_PROMPT,
             messages=[{"role": "user", "content": message}]
@@ -167,7 +173,7 @@ class EmailAgent:
         )
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=DRAFT_MODEL,
             max_tokens=1024,
             system=DRAFT_PROMPT,
             messages=[{"role": "user", "content": message}]

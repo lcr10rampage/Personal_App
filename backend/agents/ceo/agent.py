@@ -427,7 +427,11 @@ class CEOAgent:
             response = self.client.messages.create(
                 model="claude-sonnet-4-6",
                 max_tokens=2048,
-                system=SYSTEM_PROMPT,
+                # Cache the static prefix (tools + system prompt). The breakpoint on the
+                # system block caches everything before it too — i.e. the whole TOOLS array —
+                # so on turn 2+ and every tool-loop iteration these are read from cache at
+                # ~1/10 the input cost instead of re-sent full price.
+                system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
                 tools=TOOLS,
                 messages=messages
             )

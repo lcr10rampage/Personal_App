@@ -90,6 +90,12 @@ or
 {"action": "add"}
 """
 
+# personalize() is the LAST transform before the user sees a reply → keep Sonnet so
+# facts/tone stay intact. observe / recall / reconcile are internal bookkeeping → Haiku.
+PERSONALIZE_MODEL = "claude-sonnet-4-6"
+INTERNAL_MODEL = "claude-haiku-4-5-20251001"
+
+
 class MemoryAgent:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -109,7 +115,7 @@ class MemoryAgent:
         )
 
         result = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=PERSONALIZE_MODEL,
             max_tokens=1024,
             system=PERSONALIZE_PROMPT,
             messages=[{"role": "user", "content": message}]
@@ -123,7 +129,7 @@ class MemoryAgent:
         )
 
         result = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=INTERNAL_MODEL,
             max_tokens=512,
             system=OBSERVE_PROMPT,
             messages=[{"role": "user", "content": message}]
@@ -178,7 +184,7 @@ class MemoryAgent:
 
         try:
             result = self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=INTERNAL_MODEL,
                 max_tokens=128,
                 system=RECONCILE_PROMPT,
                 messages=[{"role": "user", "content": message}]
@@ -202,7 +208,7 @@ class MemoryAgent:
             return f"No memories stored yet for {manager}."
 
         result = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=INTERNAL_MODEL,
             max_tokens=512,
             system=RECALL_PROMPT,
             messages=[{"role": "user", "content": f"Manager: {manager}\n\nMemories:\n{memory_text}"}]

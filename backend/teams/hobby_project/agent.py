@@ -2,6 +2,7 @@ import os
 import re
 import anthropic
 import project_inbox
+from teams.sdk_backend import use_sdk, run_agentic, run_oneshot, format_prompt
 
 # Where the Project & Hobby Team knowledge base lives (the Project-hobby-team repo).
 # Override with HOBBY_TEAM_DIR if it lives elsewhere.
@@ -216,6 +217,10 @@ class HobbyProjectTeam:
         user = f"Task from the Project Coordinator:\n{task}"
         if context:
             user += f"\n\nContext / confirmed facts:\n{context}"
+        # Run each specialist on the subscription too — this is where most of this
+        # team's tokens go (14 specialists x long deliverables).
+        if use_sdk():
+            return run_oneshot(system, user)
         result = self.client.messages.create(
             model=MODEL,
             max_tokens=3000,
@@ -268,7 +273,9 @@ class HobbyProjectTeam:
 
     # --- tool dispatch ---
     def _handle_tool(self, block) -> str:
-        n, i = block.name, block.input
+        return self._dispatch(block.name, block.input)
+
+    def _dispatch(self, n: str, i: dict) -> str:
         if n == "read_team_file":
             return self._read_kb(i["path"])
         if n == "list_team_files":
@@ -292,6 +299,15 @@ class HobbyProjectTeam:
 
     # --- main loop ---
     def chat(self, user_message: str, history=None) -> str:
+        if use_sdk():
+            try:
+                prompt = format_prompt(history, user_message)
+                return run_agentic(self.system_prompt, TOOLS, self._dispatch, prompt)
+            except Exception as e:
+                print(f"[hobby_project] SDK backend failed ({type(e).__name__}: {e}); falling back to API")
+        return self._chat_api(user_message, history)
+
+    def _chat_api(self, user_message: str, history=None) -> str:
         # Prior turns come from the persisted conversation (text-only), so the
         # Coordinator remembers the classification and won't re-ask hobby/project.
         messages = [dict(m) for m in (history or [])]

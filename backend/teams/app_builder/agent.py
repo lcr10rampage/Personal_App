@@ -1,5 +1,6 @@
 import os
 import anthropic
+from teams.sdk_backend import use_sdk, run_agentic, format_prompt
 
 # Where the App-Building Team system lives (the App-System-Guide repo).
 # Override with APP_SYSTEM_GUIDE_DIR if it lives elsewhere.
@@ -74,6 +75,17 @@ class AppBuilderTeam:
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
     def chat(self, user_message: str, history=None) -> str:
+        if use_sdk():
+            try:
+                prompt = format_prompt(history, user_message)
+                return run_agentic(SYSTEM_PROMPT, TOOLS, self._dispatch, prompt)
+            except Exception as e:
+                # A subscription hiccup must not hard-break the team — fall back to the
+                # API path (which needs ANTHROPIC_API_KEY to actually succeed).
+                print(f"[app_builder] SDK backend failed ({type(e).__name__}: {e}); falling back to API")
+        return self._chat_api(user_message, history)
+
+    def _chat_api(self, user_message: str, history=None) -> str:
         # Prior turns come from the persisted conversation (text-only).
         messages = [dict(m) for m in (history or [])]
         messages.append({"role": "user", "content": user_message})
@@ -104,10 +116,13 @@ class AppBuilderTeam:
                 messages.append({"role": "user", "content": tool_results})
 
     def _handle_tool(self, block) -> str:
-        if block.name == "list_guide_files":
+        return self._dispatch(block.name, block.input)
+
+    def _dispatch(self, name: str, inp: dict) -> str:
+        if name == "list_guide_files":
             return self._list_files()
-        if block.name == "read_guide_file":
-            return self._read_file(block.input["path"], block.input.get("max_chars", 12000))
+        if name == "read_guide_file":
+            return self._read_file(inp["path"], inp.get("max_chars", 12000))
         return "Unknown tool."
 
     def _list_files(self) -> str:
