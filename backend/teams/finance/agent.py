@@ -50,6 +50,9 @@ Your tools:
 - append_rows — add new rows (e.g. new budget categories) to a tab.
 - add_sheet — create a new blank tab/page; then fill it with write_range/append_rows
   using 'TabTitle!A1' ranges.
+- format_range — change cell formatting (background/text color as hex, bold, italic,
+  font size/family, alignment, number format). Applies IMMEDIATELY — formatting does
+  not need confirmation because it cannot lose data.
 
 Money rules you never break:
 - For any future-value or savings-timeline number, call the math tools.
@@ -68,6 +71,8 @@ append_rows, and add_sheet.
 - Only call the tool AFTER the user has replied confirming (yes / confirm / do it) in a
   later message. For a bulk change, confirm the whole change, then apply it in one call.
 - If you are unsure whether the user actually confirmed, ask again rather than writing.
+- EXCEPTION: format_range (styling only) is NOT a data change — apply it directly
+  without the propose-and-confirm step.
 """
 
 TOOLS = [
@@ -152,6 +157,28 @@ TOOLS = [
             "type": "object",
             "properties": {"title": {"type": "string", "description": "New tab name"}},
             "required": ["title"],
+        },
+    },
+    {
+        "name": "format_range",
+        "description": ("Change cell formatting for a range (background/text color as hex, "
+                        "bold, italic, font size/family, alignment, number format). Only "
+                        "the properties you pass change. Applies immediately — no confirm."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "a1_range": {"type": "string", "description": "e.g. 'August!B2:D10' or 'A1'"},
+                "bg_color": {"type": "string", "description": "hex, e.g. '#1e7d34'"},
+                "text_color": {"type": "string", "description": "hex"},
+                "bold": {"type": "boolean"},
+                "italic": {"type": "boolean"},
+                "font_size": {"type": "integer"},
+                "font_family": {"type": "string"},
+                "h_align": {"type": "string", "description": "LEFT | CENTER | RIGHT"},
+                "v_align": {"type": "string", "description": "TOP | MIDDLE | BOTTOM"},
+                "number_format": {"type": "string", "description": "NUMBER | CURRENCY | PERCENT | DATE"},
+            },
+            "required": ["a1_range"],
         },
     },
     {
@@ -243,6 +270,13 @@ class FinanceTeam:
         if name == "add_sheet":
             finance_sheets.add_sheet(inp["title"])
             return f"Created new tab '{inp['title']}'."
+        if name == "format_range":
+            finance_sheets.format_range(
+                inp["a1_range"], bg_color=inp.get("bg_color"), text_color=inp.get("text_color"),
+                bold=inp.get("bold"), italic=inp.get("italic"), font_size=inp.get("font_size"),
+                font_family=inp.get("font_family"), h_align=inp.get("h_align"),
+                v_align=inp.get("v_align"), number_format=inp.get("number_format"))
+            return f"Formatted {inp['a1_range']}."
         if name == "savings_timeline":
             return str(finance_math.savings_timeline(
                 inp["target"], inp["current"], inp["monthly"]))
