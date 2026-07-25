@@ -40,7 +40,10 @@ SYSTEM_PROMPT = """You are a careful personal finance assistant in a web dashboa
 help with a budget kept in a Google Sheet, saving toward goals, and investment planning.
 
 Your tools:
-- read_budget — read the user's budget sheet.
+- read_budget — read the user's budget sheet (values).
+- read_format — see the CURRENT formatting (bold, italic, font size/family, text &
+  background color as hex, alignment, number format) of cells in a range. Use this
+  before restyling so you match or report existing formatting.
 - savings_timeline / compound_growth — do the math. ALWAYS use these for any
   future-value or savings number. NEVER do the arithmetic yourself.
 - apply_budget_write — change one cell of the budget sheet.
@@ -80,6 +83,17 @@ TOOLS = [
         "name": "read_budget",
         "description": "Read the user's budget sheet and return its rows.",
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "read_format",
+        "description": ("See the current formatting (bold, italic, font size/family, text "
+                        "& background color as hex, alignment, number format) of every "
+                        "non-empty cell in a range, e.g. 'August!A1:D10'. Read-only."),
+        "input_schema": {
+            "type": "object",
+            "properties": {"a1_range": {"type": "string", "description": "e.g. 'August!A1:D10'"}},
+            "required": ["a1_range"],
+        },
     },
     {
         "name": "apply_budget_write",
@@ -254,6 +268,31 @@ class FinanceTeam:
         if name == "read_budget":
             rows = finance_sheets.read_range(BUDGET_RANGE)
             return "\n".join("\t".join(r) for r in rows) or "(empty)"
+        if name == "read_format":
+            rows = finance_sheets.read_format(inp["a1_range"])
+            if not rows:
+                return "(no non-empty cells in range)"
+            lines = []
+            for r in rows:
+                parts = [f"{r['cell']}: {r['value']!r}"]
+                if r["bold"]:
+                    parts.append("bold")
+                if r["italic"]:
+                    parts.append("italic")
+                if r["font_size"]:
+                    parts.append(f"size {r['font_size']}")
+                if r["font_family"]:
+                    parts.append(r["font_family"])
+                if r["text_color"]:
+                    parts.append(f"text {r['text_color']}")
+                if r["bg_color"]:
+                    parts.append(f"bg {r['bg_color']}")
+                if r["h_align"]:
+                    parts.append(r["h_align"])
+                if r["number_format"]:
+                    parts.append(r["number_format"])
+                lines.append(" | ".join(parts))
+            return "\n".join(lines)
         if name == "apply_budget_write":
             finance_sheets.write_cell(inp["cell"], inp["value"])
             return f"Wrote '{inp['value']}' to {inp['cell']}."
