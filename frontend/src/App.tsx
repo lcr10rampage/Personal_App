@@ -66,6 +66,18 @@ const TEAMS: Team[] = [
     ],
   },
   {
+    id: 'finance',
+    name: 'Finance',
+    description: 'Budget, saving goals, and investment planning',
+    icon: '$',
+    available: true,
+    agents: [
+      { id: 'budget',    name: 'Budget',    status: 'ready' },
+      { id: 'savings',   name: 'Savings',   status: 'ready' },
+      { id: 'investing', name: 'Investing', status: 'ready' },
+    ],
+  },
+  {
     id: 'website_builder',
     name: 'Website Builder',
     description: 'Build and deploy websites',

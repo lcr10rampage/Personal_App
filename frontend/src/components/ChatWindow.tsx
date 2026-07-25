@@ -41,6 +41,12 @@ const SUGGESTIONS: Record<string, string[]> = {
     'Review my current design',
     'What stage are we in?',
   ],
+  finance: [
+    'What\'s in my budget?',
+    'Where am I overspending?',
+    'How much should I save each month to reach $500?',
+    'Project investing $30/month for 10 years',
+  ],
   hobby_project: [
     'Plan a garage workbench',
     'Help me get into fishing',

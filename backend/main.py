@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from agents.ceo.agent import CEOAgent
 from teams.app_builder.agent import AppBuilderTeam
+from teams.finance.agent import FinanceTeam
 from teams.hobby_project.agent import HobbyProjectTeam, TEAM_DIR
 import conversations as convo
 
@@ -33,6 +34,7 @@ app.mount("/workspaces", StaticFiles(directory=WORKSPACES_DIR, html=True), name=
 TEAMS = {
     "life_manager": CEOAgent(),
     "app_builder": AppBuilderTeam(),
+    "finance": FinanceTeam(),
     "hobby_project": HobbyProjectTeam(),
 }
 
