@@ -43,7 +43,13 @@ Your tools:
 - read_budget — read the user's budget sheet.
 - savings_timeline / compound_growth — do the math. ALWAYS use these for any
   future-value or savings number. NEVER do the arithmetic yourself.
-- apply_budget_write — change ONE cell of the budget sheet.
+- apply_budget_write — change one cell of the budget sheet.
+- write_range — write a grid of values at once, starting at an anchor cell (e.g.
+  'August!A1'). Use for a column/block of values.
+- write_cells — change several scattered cells in one action.
+- append_rows — add new rows (e.g. new budget categories) to a tab.
+- add_sheet — create a new blank tab/page; then fill it with write_range/append_rows
+  using 'TabTitle!A1' ranges.
 
 Money rules you never break:
 - For any future-value or savings-timeline number, call the math tools.
@@ -52,14 +58,16 @@ Money rules you never break:
 - You cannot access Venmo, live market prices, or brokerage accounts. Say so if asked.
 - Explain your reasoning plainly. You prepare and advise; the user decides.
 
-WRITE SAFETY (critical — this is a web chat with no confirmation popup):
-- NEVER call apply_budget_write in the same turn you first propose a change.
-- To change the sheet: first REPLY with the exact change — the cell, and old value ->
-  new value — and ask the user to reply "yes" to apply it. Do NOT call the write tool yet.
-- Only call apply_budget_write AFTER the user has replied confirming (yes / confirm / do
-  it) in a later message.
+WRITE SAFETY (critical — this is a web chat with no confirmation popup). This applies
+to EVERY tool that changes the sheet: apply_budget_write, write_range, write_cells,
+append_rows, and add_sheet.
+- NEVER call any of those tools in the same turn you first propose the change.
+- First REPLY describing the exact change in full — the cell(s) and old -> new values,
+  or the grid/rows you'll write, or the tab you'll create — and ask the user to reply
+  "yes" to apply it. Do NOT call the write tool yet.
+- Only call the tool AFTER the user has replied confirming (yes / confirm / do it) in a
+  later message. For a bulk change, confirm the whole change, then apply it in one call.
 - If you are unsure whether the user actually confirmed, ask again rather than writing.
-- One cell per write.
 """
 
 TOOLS = [
@@ -80,6 +88,70 @@ TOOLS = [
                 "value": {"type": "string", "description": "The new cell value"},
             },
             "required": ["cell", "value"],
+        },
+    },
+    {
+        "name": "write_range",
+        "description": ("Write a 2D grid of values at once, starting at an anchor cell. "
+                        "'anchor' is A1 notation and may include a tab name (e.g. "
+                        "'August!A1'). 'values' is a list of rows, each a list of strings. "
+                        "Only call AFTER the user confirmed the change."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "anchor": {"type": "string", "description": "Anchor cell, e.g. 'August!A1'"},
+                "values": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+            },
+            "required": ["anchor", "values"],
+        },
+    },
+    {
+        "name": "write_cells",
+        "description": ("Write several scattered cells in one action. 'updates' is a list "
+                        "of {\"cell\": \"C5\", \"value\": \"650\"}. Only call AFTER the "
+                        "user confirmed the change."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "updates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "cell": {"type": "string"},
+                            "value": {"type": "string"},
+                        },
+                        "required": ["cell", "value"],
+                    },
+                },
+            },
+            "required": ["updates"],
+        },
+    },
+    {
+        "name": "append_rows",
+        "description": ("Append new rows after existing data on a tab (e.g. add new budget "
+                        "category rows). 'values' is a list of rows; 'sheet_title' is "
+                        "optional (defaults to the first tab). Only call AFTER the user "
+                        "confirmed the change."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "values": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+                "sheet_title": {"type": "string"},
+            },
+            "required": ["values"],
+        },
+    },
+    {
+        "name": "add_sheet",
+        "description": ("Create a new blank tab/page. 'title' is the tab name. Then fill it "
+                        "with write_range/append_rows using 'Title!A1' ranges. Only call "
+                        "AFTER the user confirmed."),
+        "input_schema": {
+            "type": "object",
+            "properties": {"title": {"type": "string", "description": "New tab name"}},
+            "required": ["title"],
         },
     },
     {
@@ -158,6 +230,19 @@ class FinanceTeam:
         if name == "apply_budget_write":
             finance_sheets.write_cell(inp["cell"], inp["value"])
             return f"Wrote '{inp['value']}' to {inp['cell']}."
+        if name == "write_range":
+            finance_sheets.write_range(inp["anchor"], inp["values"])
+            n = sum(len(r) for r in inp["values"])
+            return f"Wrote {n} values starting at {inp['anchor']}."
+        if name == "write_cells":
+            finance_sheets.write_cells(inp["updates"])
+            return f"Wrote {len(inp['updates'])} cells: " + ", ".join(u["cell"] for u in inp["updates"]) + "."
+        if name == "append_rows":
+            finance_sheets.append_rows(inp["values"], inp.get("sheet_title") or None)
+            return f"Appended {len(inp['values'])} row(s) to {inp.get('sheet_title') or 'the budget tab'}."
+        if name == "add_sheet":
+            finance_sheets.add_sheet(inp["title"])
+            return f"Created new tab '{inp['title']}'."
         if name == "savings_timeline":
             return str(finance_math.savings_timeline(
                 inp["target"], inp["current"], inp["monthly"]))
