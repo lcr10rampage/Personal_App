@@ -8,3 +8,6 @@ token*.json
 *.log
 backend/data/
 backend/agents/memory/memories.json
+
+# Per-user Venmo import state (message ids already imported)
+.venmo_processed.json
