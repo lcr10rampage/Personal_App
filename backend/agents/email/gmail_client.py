@@ -58,12 +58,14 @@ def search_emails(query: str, max_results=50) -> list:
 
     Uses only messages.list + messages.get — no send/compose path exists here."""
     out = []
+    errors = []
     for label, service in _gmail_services():
         try:
             result = service.users().messages().list(
                 userId="me", maxResults=max_results, q=query
             ).execute()
-        except Exception:
+        except Exception as e:
+            errors.append(f"{label}: {type(e).__name__}: {e}")
             continue
         for msg in result.get("messages", []):
             full = service.users().messages().get(
@@ -79,6 +81,11 @@ def search_emails(query: str, max_results=50) -> list:
                 "snippet": full.get("snippet", ""),
                 "body": _extract_body(full["payload"])[:4000],
             })
+    if not out and errors:
+        # Don't let an auth/connection failure masquerade as "no results".
+        raise RuntimeError(
+            "Gmail search failed (token may be expired — re-run auth_google.py): "
+            + "; ".join(errors))
     return out
 
 

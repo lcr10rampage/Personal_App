@@ -379,7 +379,11 @@ class FinanceTeam:
                 v_align=inp.get("v_align"), number_format=inp.get("number_format"))
             return f"Formatted {inp['a1_range']}."
         if name == "fetch_venmo_transactions":
-            txns = venmo.fetch_new(int(inp.get("since_days", 30)))
+            try:
+                txns = venmo.fetch_new(int(inp.get("since_days", 30)))
+            except Exception as e:
+                return (f"Couldn't read Gmail: {e}. If the token is expired, the user "
+                        "needs to re-run auth_google.py to re-authorize Gmail access.")
             self._venmo_pending = {t["msg_id"]: t for t in txns}
             if not txns:
                 return "No new Venmo transactions found."

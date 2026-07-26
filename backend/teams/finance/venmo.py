@@ -72,7 +72,7 @@ def mark_processed(ids) -> None:
 
 def fetch_new(since_days: int = 30, max_results: int = 50) -> list[dict]:
     from agents.email.gmail_client import search_emails
-    emails = search_emails(f"from:venmo.com newer_than:{since_days}d", max_results)
+    emails = search_emails(f"from:venmo@venmo.com newer_than:{since_days}d", max_results)
     processed = load_processed()
     out = []
     for e in emails:
