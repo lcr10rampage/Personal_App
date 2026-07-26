@@ -5,6 +5,7 @@ prevents double entry across runs.
 import os
 import re
 import json
+import html
 from email.utils import parsedate_to_datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -15,40 +16,68 @@ MONTHS = ["January", "February", "March", "April", "May", "June", "July",
           "August", "September", "October", "November", "December"]
 
 _AMOUNT_RE = re.compile(r"\$\s?([\d,]+\.\d{2})")
+# Subjects that are NOT completed transactions (requests, reminders, declines, updates).
+_SKIP_SUBJECT = ("requested", "reminder:", "was declined", "payment was declined",
+                 "updated total", "updated the amount")
 
 
 # ---------- parsing (pure, deterministic) ----------
 
 def parse_venmo_email(subject: str, body: str) -> dict | None:
-    """Parse a Venmo notification. Returns {amount, direction, counterparty, note} or
-    None when it can't confidently read an amount + direction (skip, don't guess)."""
-    text = subject or ""
-    low = text.lower()
-    m = _AMOUNT_RE.search(text) or _AMOUNT_RE.search(body or "")
+    """Parse a Venmo notification into a completed transaction, matching Venmo's real
+    formats:
+      - 'You got $X from <Name>'                 -> received
+      - 'You paid <Name> $X'                     -> paid
+      - 'You made a purchase with your debit card' -> paid (merchant+amount in body)
+    Returns {amount, direction, counterparty, note} or None for non-transactions
+    (requests, reminders, declines) or anything it can't read confidently."""
+    subj = (subject or "").strip()
+    low = subj.lower()
+    b = body or ""
+    blow = b.lower()
+
+    if any(s in low for s in _SKIP_SUBJECT):
+        return None
+
+    if low.startswith("you got") or (
+            " paid you" in blow and not low.startswith("you paid") and "made a purchase" not in low):
+        direction = "received"
+    elif low.startswith("you paid") or "made a purchase" in low:
+        direction = "paid"
+    else:
+        return None
+
+    m = _AMOUNT_RE.search(subj) or _AMOUNT_RE.search(b)
     if not m:
         return None
     amount = float(m.group(1).replace(",", ""))
 
-    if "paid you" in low or "you received" in low:
-        direction = "received"
-    elif "you paid" in low or "charged you" in low or "you sent" in low:
-        direction = "paid"
-    else:
-        return None  # ambiguous direction — skip rather than misclassify
-
-    counterparty = ""
-    for pat in (r"you paid (.+?) \$", r"(.+?) paid you \$", r"(.+?) charged you \$"):
-        mm = re.search(pat, text, re.I)
+    counterparty, note = "", ""
+    if direction == "received":
+        mm = re.search(r"\bfrom\s+(.+)$", subj, re.I)
         if mm:
             counterparty = mm.group(1).strip()
-            break
+    elif "made a purchase" in low:
+        mm = re.search(r"you paid (.+?)\s+\$", b, re.I)
+        if mm:
+            counterparty = mm.group(1).strip()
+            note = counterparty  # merchant is the best categorization signal
+    else:
+        mm = re.search(r"you paid (.+?)\s+\$", subj, re.I)
+        if mm:
+            counterparty = mm.group(1).strip()
 
-    note = ""
-    mn = re.search(r"(?:note|for)[:\s]+(.{1,80})", body or "", re.I)
-    if mn:
-        note = mn.group(1).strip().splitlines()[0]
+    # Best-effort memo from the body (the text right before "Like Comment"), dropping
+    # numeric/amount tokens.
+    if not note:
+        mn = re.search(r"([A-Za-z0-9][\w &'\-.]{1,38})\s+Like\s+Comment", b)
+        if mn:
+            words = [w for w in mn.group(1).split() if not re.match(r"^[\d.$]+$", w)]
+            note = " ".join(words[-4:])
 
-    return {"amount": amount, "direction": direction, "counterparty": counterparty, "note": note}
+    return {"amount": amount, "direction": direction,
+            "counterparty": html.unescape(counterparty).strip(),
+            "note": html.unescape(note).strip()}
 
 
 # ---------- de-duplication ----------

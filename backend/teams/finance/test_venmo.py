@@ -7,28 +7,42 @@ from teams.finance import venmo
 
 # ---------- parser ----------
 
-def test_parse_paid():
-    r = venmo.parse_venmo_email("You paid Jane Doe $15.00", "for lunch")
-    assert r == {"amount": 15.0, "direction": "paid", "counterparty": "Jane Doe", "note": "lunch"}
+def test_parse_paid_p2p():
+    r = venmo.parse_venmo_email("You paid Cheston $5.36",
+                                "Cheston paid Cheston Riley $ 5 . 36 River link tolls Like Comment")
+    assert r["amount"] == 5.36 and r["direction"] == "paid" and r["counterparty"] == "Cheston"
+    assert r["note"] == "River link tolls"
 
 
 def test_parse_received():
-    r = venmo.parse_venmo_email("John Smith paid you $20.50", "")
-    assert r["amount"] == 20.5 and r["direction"] == "received" and r["counterparty"] == "John Smith"
+    r = venmo.parse_venmo_email("You got $98.40 from Cheston", "Cheston paid you $ 98 . 40 Like Comment")
+    assert r["amount"] == 98.4 and r["direction"] == "received" and r["counterparty"] == "Cheston"
 
 
-def test_parse_charged():
-    r = venmo.parse_venmo_email("Store charged you $8.25", "")
-    assert r["amount"] == 8.25 and r["direction"] == "paid"
+def test_parse_debit_purchase():
+    r = venmo.parse_venmo_email("You made a purchase with your debit card",
+                                "You paid Five Guys Ga 1582 Qsr $23.38. Luke paid ...")
+    assert r["amount"] == 23.38 and r["direction"] == "paid"
+    assert r["counterparty"] == "Five Guys Ga 1582 Qsr"
 
 
-def test_parse_ambiguous_returns_none():
+def test_parse_html_entities_cleaned():
+    r = venmo.parse_venmo_email("You made a purchase with your debit card",
+                                "You paid Bantam &amp; Biddy $20.15.")
+    assert r["counterparty"] == "Bantam & Biddy"
+
+
+def test_parse_request_is_skipped():
+    assert venmo.parse_venmo_email("Michelle requested $8.00", "Michelle requests $8.00") is None
+    assert venmo.parse_venmo_email("Reminder: Cheston Riley requested $5.36", "") is None
+
+
+def test_parse_declined_is_skipped():
+    assert venmo.parse_venmo_email("Your payment to BUFFALO WILD was declined", "declined") is None
+
+
+def test_parse_no_amount_returns_none():
     assert venmo.parse_venmo_email("Your Venmo statement is ready", "no amount here") is None
-
-
-def test_parse_no_direction_returns_none():
-    # amount present but no paid/received keyword -> skip
-    assert venmo.parse_venmo_email("Venmo receipt $5.00", "") is None
 
 
 def test_money_helpers():
