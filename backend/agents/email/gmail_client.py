@@ -53,6 +53,35 @@ def fetch_recent_emails(max_results=15) -> list:
             })
     return emails
 
+def search_emails(query: str, max_results=50) -> list:
+    """Read-only Gmail search by query string (e.g. 'from:venmo.com newer_than:30d').
+
+    Uses only messages.list + messages.get — no send/compose path exists here."""
+    out = []
+    for label, service in _gmail_services():
+        try:
+            result = service.users().messages().list(
+                userId="me", maxResults=max_results, q=query
+            ).execute()
+        except Exception:
+            continue
+        for msg in result.get("messages", []):
+            full = service.users().messages().get(
+                userId="me", id=msg["id"], format="full"
+            ).execute()
+            headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
+            out.append({
+                "id": msg["id"],
+                "account": label,
+                "subject": headers.get("Subject", "(no subject)"),
+                "from": headers.get("From", "unknown"),
+                "date": headers.get("Date", "unknown"),
+                "snippet": full.get("snippet", ""),
+                "body": _extract_body(full["payload"])[:4000],
+            })
+    return out
+
+
 def _extract_body(payload) -> str:
     if "parts" in payload:
         for part in payload["parts"]:
